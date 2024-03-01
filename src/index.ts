@@ -5,6 +5,8 @@ import { execa } from 'execa';
 import inquirer from 'inquirer';
 import { createSpinner } from 'nanospinner';
 import { simpleGit } from 'simple-git';
+import { existsSync } from 'fs';
+import { join } from 'path';
 
 const git = simpleGit();
 
@@ -19,6 +21,25 @@ if (args.includes('-h') || args.includes('--help')) {
 }
 
 console.log(chalk.cyan('ℹ'), chalk.white('Welcome to bump!'));
+
+const workdirSpinner = createSpinner('checking working directory', { color: 'gray' });
+if (!existsSync(join(process.cwd(), 'package.json'))) {
+  workdirSpinner.error();
+  console.log(chalk.red('ⓧ No package.json found in the current directory.'));
+  console.log(chalk.red('Please run bump from the root of your project.'));
+  console.log(chalk.red('Aborting...'));
+  process.exit(1);
+}
+
+const isRepo = await git.checkIsRepo();
+if (!isRepo) {
+  workdirSpinner.error();
+  console.log(chalk.red('ⓧ No git repository found in the current directory.'));
+  console.log(chalk.red('Please run bump from the root of your project.'));
+  console.log(chalk.red('Aborting...'));
+  process.exit(1);
+}
+workdirSpinner.success();
 
 if (!bumpType) {
   console.log(chalk.red('\nⓧ No version type provided.'));
@@ -35,7 +56,6 @@ if (!commitMessage) {
   await promptCommitMessage();
 }
 
-console.log('');
 const gitStatusSpinner = createSpinner('checking git status', { color: 'gray' });
 gitStatusSpinner.start();
 
