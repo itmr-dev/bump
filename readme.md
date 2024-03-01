@@ -1,4 +1,13 @@
-# Bump
+<!--p align="center"><a href="#" target="_blank" rel="noopener noreferrer"><img width="100" src="assets/blaze.png" alt="bump logo"></a></p-->
+
+<h1 align="center">bump</h1>
+
+<p align="center">
+<a href="https://www.npmjs.com/package/@itmr.dev/bump" title="open on npm"><img alt="NPM Version" src="https://img.shields.io/npm/v/%40itmr.dev%2Fbump"></a>
+<a href="https://github.com/itmr-dev/bump" title="Go to GitHub repo"><img src="https://img.shields.io/static/v1?label=itmr-dev&amp;message=bump&amp;color=blue&amp;logo=github" alt="itmr-dev - bump"></a>
+<!--a href="https://github.com/itmr-dev/bump/actions?query=workflow:&quot;prod+ci&quot;"><img src="https://github.com/itmr-dev/bump/workflows/prod%20ci/badge.svg" alt="prod ci"></a-->
+<a href="https://github.com/itmr-dev/bump/issues"><img src="https://img.shields.io/github/issues/itmr-dev/bump" alt="issues - bump"></a>
+</p>
 
 Welcome to Bump, a command-line tool designed to automate the process of version bumping in your package.json and applying git tags. This tool simplifies your workflow, ensuring consistent versioning practices and making your release process smoother and more efficient.
 
@@ -51,6 +60,7 @@ bump minor "Add new features"
 ```
 
 Initialize GitHub workflows for Docker:
+
 ```bash
 bump --setup-workflows
 ```
