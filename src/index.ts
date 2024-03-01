@@ -43,7 +43,7 @@ try {
   const gitStatus = await git.status();
   gitStatusSpinner.success();
   if (gitStatus.files.length > 0) {
-    console.log(chalk.red('\n⚠ You have uncommitted changes'));
+    console.log(chalk.yellow('\n⚠ You have uncommitted changes'));
     const commit = await promptCommitChanges()
     if (!commit) {
       console.log(chalk.red('\nⓧ Aborting...'));
@@ -74,7 +74,7 @@ try {
   const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
   let remote = await git.remote(['get-url', 'origin']);
   if (!remote) {
-    console.log(chalk.red('\n⚠ Unable to determine remote. Skipping push.'));
+    console.log(chalk.yellow('\n⚠ Unable to determine remote. Skipping push.'));
   } else {
     remote = remote.trim();
     const push = await promptPushChanges();
