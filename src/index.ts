@@ -21,32 +21,32 @@ if (args.includes('-h') || args.includes('--help')) {
 console.log(chalk.cyan('ℹ'), chalk.white('Welcome to bump!'));
 
 if (!bumpType) {
-  console.error(chalk.red('\nⓧ No version type provided.'));
+  console.log(chalk.red('\nⓧ No version type provided.'));
   await promptBumpType();
 } else {
   if (!validBumpTypes.includes(bumpType)) {
-    console.error(chalk.red('\nⓧ Invalid version type provided.'));
+    console.log(chalk.red('\nⓧ Invalid version type provided.'));
     await promptBumpType();
   }
 }
 
 if (!commitMessage) {
-  console.error(chalk.red('\nⓧ No commit message provided.'));
+  console.log(chalk.red('\nⓧ No commit message provided.'));
   await promptCommitMessage();
 }
 
 console.log('');
-const gitStatusSpinner = createSpinner('checking git status');
+const gitStatusSpinner = createSpinner('checking git status', { color: 'gray' });
 gitStatusSpinner.start();
 
 try {
   const gitStatus = await git.status();
   gitStatusSpinner.success();
   if (gitStatus.files.length > 0) {
-    console.error(chalk.red('\n⚠ You have uncommitted changes'));
+    console.log(chalk.red('\n⚠ You have uncommitted changes'));
     const commit = await promptCommitChanges()
     if (!commit) {
-      console.error(chalk.red('\nⓧ Aborting...'));
+      console.log(chalk.red('\nⓧ Aborting...'));
       process.exit(1);
     }
   }
@@ -56,7 +56,7 @@ try {
   process.exit(1);
 }
 
-const versionSpinner = createSpinner('bumping version');
+const versionSpinner = createSpinner('bumping version', { color: 'gray' });
 versionSpinner.start();
 
 try {
@@ -74,12 +74,12 @@ try {
   const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
   let remote = await git.remote(['get-url', 'origin']);
   if (!remote) {
-    console.error(chalk.red('\n⚠ Unable to determine remote. Skipping push.'));
+    console.log(chalk.red('\n⚠ Unable to determine remote. Skipping push.'));
   } else {
     remote = remote.trim();
     const push = await promptPushChanges();
     if (push) {
-      pushSpinner = createSpinner('pushing changes');
+      pushSpinner = createSpinner('pushing changes', { color: 'gray' });
       pushSpinner.start();
       await git.push(remote, currentBranch);
       await git.pushTags(remote);
@@ -91,7 +91,7 @@ try {
     pushSpinner.error();
   }
   console.log(error);
-  console.error(chalk.red('\nⓧ Unable to push changes. Please push manually.'));
+  console.log(chalk.red('\nⓧ Unable to push changes. Please push manually.'));
 }
 
 console.log(chalk.green('\n✔ Version bumped successfully!'));
