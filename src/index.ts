@@ -75,6 +75,7 @@ try {
     const pushSpinner = createSpinner('pushing changes');
     pushSpinner.start();
     await git.push();
+    await git.pushTags();
     pushSpinner.success();
   }
 } catch (error) {
