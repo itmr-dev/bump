@@ -5,8 +5,12 @@ import { execa } from 'execa';
 import inquirer from 'inquirer';
 import { createSpinner } from 'nanospinner';
 import { simpleGit } from 'simple-git';
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { existsSync, mkdirSync, copyFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const git = simpleGit();
 
@@ -21,6 +25,14 @@ if (args.includes('-h') || args.includes('--help')) {
 }
 
 console.log(chalk.cyan('ℹ'), chalk.white('Welcome to bump!'));
+
+if (args.includes('--setup-workflows')) {
+  const spinner = createSpinner('Setting up GitHub workflows', { color: 'gray' });
+  await setupGithubWorkflows();
+  spinner.success();
+  console.log(chalk.green('✔ Workflows setup successfully!'));
+  process.exit(0);
+}
 
 const workdirSpinner = createSpinner('checking working directory', { color: 'gray' });
 if (!existsSync(join(process.cwd(), 'package.json'))) {
@@ -163,8 +175,26 @@ async function promptPushChanges() {
 function displayHelp() {
   console.log(chalk.green('Usage: bump [options] <patch|minor|major> [commitMessage]'));
   console.log('\nOptions:');
-  console.log('  -h, --help     Display this help message.\n');
+  console.log('  -h, --help               Display this help message.\n');
+  console.log('      --setup-workflows    Setup automatic Docker image build workflows for GitHub.');
+  console.log('                           This is perfect if you also use itmr-dev/blaze for your ci/cd\n');
   console.log('Arguments:');
   console.log('  <patch|minor|major>    Type of version bump to apply.');
   console.log('  [commitMessage]        Optional commit message (default: "bump version").');
+}
+
+async function setupGithubWorkflows() {
+  const workflowsDir = join(process.cwd(), '.github', 'workflows');
+  if (!await existsSync(workflowsDir)) {
+    await mkdirSync(workflowsDir, { recursive: true });
+  }
+  const workflows = [
+    'docker-ci-dev.yml',
+    'docker-ci-prod.yml',
+  ];
+  for await (const workflow of workflows) {
+    const source = join(__dirname, '..', 'templates', workflow);
+    const dest = join(workflowsDir, workflow);
+    await copyFileSync(source, dest);
+  }
 }
