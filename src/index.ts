@@ -83,6 +83,8 @@ try {
   process.exit(1);
 }
 
+console.log(chalk.green('\n✔ Version bumped successfully!'));
+
 async function promptBumpType() {
   bumpType = await inquirer.prompt([
     {
