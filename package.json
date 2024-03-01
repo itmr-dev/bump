@@ -1,7 +1,7 @@
 {
-  "name": "bump",
+  "name": "@itmr.dev/bump",
   "type": "module",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "a small cli tool to publish new code versions by creating git tags and updating package.json",
   "main": "./lib/index.js",
   "scripts": {
@@ -24,5 +24,8 @@
     "nodemon": "^2.0.20",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
+  },
+  "directories": {
+    "lib": "lib"
   }
 }
