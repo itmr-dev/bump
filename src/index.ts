@@ -69,18 +69,29 @@ try {
   process.exit(1);
 }
 
+let pushSpinner;
 try {
-  const push = await promptPushChanges();
-  if (push) {
-    const pushSpinner = createSpinner('pushing changes');
-    pushSpinner.start();
-    await git.push();
-    await git.pushTags();
-    pushSpinner.success();
+  const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
+  let remote = await git.remote(['get-url', 'origin']);
+  if (!remote) {
+    console.error(chalk.red('\n⚠ Unable to determine remote. Skipping push.'));
+  } else {
+    remote = remote.trim();
+    const push = await promptPushChanges();
+    if (push) {
+      pushSpinner = createSpinner('pushing changes');
+      pushSpinner.start();
+      await git.push(remote, currentBranch);
+      await git.pushTags(remote);
+      pushSpinner.success();
+    }
   }
 } catch (error) {
-  console.error(chalk.red('\nⓧ Unable to push changes.'));
-  process.exit(1);
+  if (pushSpinner) {
+    pushSpinner.error();
+  }
+  console.log(error);
+  console.error(chalk.red('\nⓧ Unable to push changes. Please push manually.'));
 }
 
 console.log(chalk.green('\n✔ Version bumped successfully!'));
