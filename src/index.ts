@@ -115,6 +115,7 @@ try {
       pushSpinner.start();
       await git.push(remote, currentBranch);
       await git.pushTags(remote);
+      await git.fetch();
       pushSpinner.success();
     }
   }
