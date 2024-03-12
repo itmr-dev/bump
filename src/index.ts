@@ -93,7 +93,7 @@ versionSpinner.start();
 
 try {
   await git.add('.');
-  await execa('npm', ['version', bumpType, '-m', commitMessage, '-f']);
+  await execa('npm', ['version', bumpType, '-m', `(%s) ${commitMessage}\n\ncommited using @itmr.dev/bump`, '-f']);
   versionSpinner.success();
 } catch (error) {
   versionSpinner.error();
