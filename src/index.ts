@@ -71,7 +71,7 @@ if (!commitMessage) {
 const gitStatusSpinner = createSpinner('checking git status', { color: 'gray' });
 gitStatusSpinner.start();
 
-let continueWithoutCommitting = false;
+let stashChanges = false;
 try {
   const gitStatus = await git.status();
   gitStatusSpinner.success();
@@ -79,8 +79,8 @@ try {
     console.log(chalk.yellow('\n⚠ You have uncommitted changes'));
     const commit = await promptCommitChanges()
     if (!commit) {
-      continueWithoutCommitting = await promptContinueEvenThoChanges()
-      if (!continueWithoutCommitting) {
+      stashChanges = await promptContinueEvenThoChanges()
+      if (!stashChanges) {
         console.log(chalk.red('\nⓧ Aborting...'));
         process.exit(1);
       }
@@ -95,14 +95,41 @@ try {
 const versionSpinner = createSpinner('bumping version', { color: 'gray' });
 versionSpinner.start();
 
+let stashingSpinner;
+if (stashChanges) {
+  try {
+    stashingSpinner = createSpinner('stashing your changes', { color: 'gray' });
+    stashingSpinner.start();
+    await git.stash(['push', '-m', 'Stashing changes before version bump']);
+  } catch (error) {
+    stashingSpinner?.error();
+    versionSpinner.error();
+    console.error(chalk.red('\nⓧ Unable to stash your changes.'));
+    process.exit(1);
+  }
+}
+
 try {
-  if (!continueWithoutCommitting) await git.add('.');
+  await git.add('.');
   await execa('npm', ['version', bumpType, '-m', `(%s) ${commitMessage}\n\ncommited using @itmr.dev/bump`, '-f']);
   versionSpinner.success();
 } catch (error) {
   versionSpinner.error();
   console.error(chalk.red('\nⓧ Unable to bump version.'));
   process.exit(1);
+}
+
+if (stashChanges) {
+  try {
+    stashingSpinner?.update({ text: 'restoring stashed changes' });
+    await git.stash(['pop']);
+    stashingSpinner?.success();
+  } catch (error) {
+    stashingSpinner?.error();
+    versionSpinner.error();
+    console.error(chalk.red('\nⓧ Unable to restore stashed changes.'));
+    process.exit(1);
+  }
 }
 
 let pushSpinner;
