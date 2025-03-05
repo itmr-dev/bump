@@ -71,6 +71,7 @@ if (!commitMessage) {
 const gitStatusSpinner = createSpinner('checking git status', { color: 'gray' });
 gitStatusSpinner.start();
 
+let continueWithoutCommitting = false;
 try {
   const gitStatus = await git.status();
   gitStatusSpinner.success();
@@ -78,8 +79,11 @@ try {
     console.log(chalk.yellow('\n⚠ You have uncommitted changes'));
     const commit = await promptCommitChanges()
     if (!commit) {
-      console.log(chalk.red('\nⓧ Aborting...'));
-      process.exit(1);
+      continueWithoutCommitting = await promptContinueEvenThoChanges()
+      if (!continueWithoutCommitting) {
+        console.log(chalk.red('\nⓧ Aborting...'));
+        process.exit(1);
+      }
     }
   }
 } catch (error) {
@@ -92,7 +96,7 @@ const versionSpinner = createSpinner('bumping version', { color: 'gray' });
 versionSpinner.start();
 
 try {
-  await git.add('.');
+  if (!continueWithoutCommitting) await git.add('.');
   await execa('npm', ['version', bumpType, '-m', `(%s) ${commitMessage}\n\ncommited using @itmr.dev/bump`, '-f']);
   versionSpinner.success();
 } catch (error) {
@@ -160,6 +164,17 @@ async function promptCommitChanges() {
     },
   ]);
   return confirm.commitChanges;
+}
+
+async function promptContinueEvenThoChanges() {
+  const confirm = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'stillContinue',
+      message: 'Would you like proceed with the bump, without including your changes?',
+    },
+  ]);
+  return confirm.stillContinue;
 }
 
 async function promptPushChanges() {
