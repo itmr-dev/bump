@@ -23,8 +23,14 @@ if (args.includes('-h') || args.includes('--help')) {
   displayHelp();
   process.exit(0);
 }
+let verbose = false;
+if (args.includes('--verbose') || args.includes('-v')) {
+  verbose = true;
+}
 
 console.log(chalk.cyan('ℹ'), chalk.white('Welcome to bump!'));
+
+if (verbose) console.log(chalk.cyan('ℹ'), chalk.white('verbose logging enabled'));
 
 if (args.includes('--setup-workflows')) {
   const spinner = createSpinner('Setting up GitHub workflows', { color: 'gray' });
@@ -89,6 +95,7 @@ try {
 } catch (error) {
   gitStatusSpinner.error();
   console.error(chalk.red('\nⓧ Unable to check git status.'));
+  if (verbose) console.error(error);
   process.exit(1);
 }
 
@@ -100,15 +107,17 @@ if (stashChanges) {
   try {
     stashingSpinner = createSpinner('stashing your changes', { color: 'gray' });
     stashingSpinner.start();
-    await git.stash(['push', '-m', 'Stashing changes before version bump']);
+    await git.stash(['push', '-m', `(bump) automated stash from ${new Date().toISOString()}`]);
   } catch (error) {
     stashingSpinner?.error();
     versionSpinner.error();
     console.error(chalk.red('\nⓧ Unable to stash your changes.'));
+    if (verbose) console.error(error);
     process.exit(1);
   }
 }
 
+let failed = false;
 try {
   await git.add('.');
   await execa('npm', ['version', bumpType, '-m', `(%s) ${commitMessage}\n\ncommited using @itmr.dev/bump`, '-f']);
@@ -116,18 +125,31 @@ try {
 } catch (error) {
   versionSpinner.error();
   console.error(chalk.red('\nⓧ Unable to bump version.'));
-  process.exit(1);
+  // @ts-ignore
+  if (error.message && error.message.includes('already exists')) {
+    console.log(chalk.red('Tag already exists. Please push the changes manually, fix the package.json or delete it.'));
+  }
+  if (verbose) console.error(error);
+  if (!stashChanges) process.exit(1);
+  failed = true;
 }
 
 if (stashChanges) {
   try {
     stashingSpinner?.update({ text: 'restoring stashed changes' });
     await git.stash(['pop']);
-    stashingSpinner?.success();
+    if (failed) {
+      stashingSpinner?.clear();
+      console.log(chalk.yellow('⚠ Stashed changes restored. Exiting now…'));
+      process.exit(1);
+    } else {
+      stashingSpinner?.success();
+    }
   } catch (error) {
     stashingSpinner?.error();
     versionSpinner.error();
     console.error(chalk.red('\nⓧ Unable to restore stashed changes.'));
+    if (verbose) console.error(error);
     process.exit(1);
   }
 }
@@ -151,11 +173,9 @@ try {
     }
   }
 } catch (error) {
-  if (pushSpinner) {
-    pushSpinner.error();
-  }
-  console.log(error);
+  pushSpinner?.error();
   console.log(chalk.red('\nⓧ Unable to push changes. Please push manually.'));
+  if (verbose) console.error(error);
 }
 
 console.log(chalk.green('\n✔ Version bumped successfully!'));
