@@ -214,14 +214,33 @@ try {
 console.log(chalk.green('\n✔ Version bumped successfully!'));
 
 async function promptBumpType() {
-  bumpType = (await inquirer.prompt([
+  const mainChoices = ['patch', 'minor', 'major', new inquirer.Separator(), 'other'];
+  
+  const { choice } = await inquirer.prompt([
     {
       type: 'list',
-      name: 'bumpType',
+      name: 'choice',
       message: 'What type of version bump would you like to make?',
-      choices: validBumpTypes,
+      choices: mainChoices,
     },
-  ])).bumpType;
+  ]);
+
+  if (choice === 'other') {
+    const { otherChoice } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'otherChoice',
+        message: 'Select pre-release version type:',
+        choices: [...validBumpTypes.filter(type => type.startsWith('pre')), new inquirer.Separator(), 'back'],
+      },
+    ]);
+    if (otherChoice === 'back') {
+      return promptBumpType();
+    }
+    bumpType = otherChoice;
+  } else {
+    bumpType = choice;
+  }
 }
 
 async function promptIfPreId() {
@@ -290,14 +309,18 @@ async function promptPushChanges() {
 }
 
 function displayHelp() {
-  console.log(chalk.green('Usage: bump [options] <patch|minor|major> [commitMessage]'));
-  console.log('\nOptions:');
+  console.log(chalk.green('Usage: bump [options] <version-type> [commitMessage]'));
+  console.log('\nVersion types:');
+  console.log('  patch|minor|major       Standard version increments');
+  console.log('  premajor|preminor      Pre-release version increments');
+  console.log('  prepatch|prerelease    Additional pre-release options\n');
+  console.log('Options:');
   console.log('  -h, --help               Display this help message.\n');
   console.log('      --setup-workflows    Setup automatic Docker image build workflows for GitHub.');
   console.log('                           This is perfect if you also use itmr-dev/blaze for your ci/cd\n');
   console.log('Arguments:');
-  console.log('  <patch|minor|major>    Type of version bump to apply.');
-  console.log('  [commitMessage]        Optional commit message (default: "bump version").');
+  console.log('  <version-type>         Type of version bump to apply (see Version types above)');
+  console.log('  [commitMessage]        Optional commit message (default: "bump version")');
 }
 
 async function setupGithubWorkflows() {
