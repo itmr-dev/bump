@@ -14,10 +14,11 @@ const __dirname = dirname(__filename);
 
 const git = simpleGit();
 
-const validBumpTypes = ['major', 'minor', 'patch'];
+const validBumpTypes = ['major', 'minor', 'patch', 'premajor', 'preminor', 'prepatch', 'prerelease'];
 
 const args = process.argv.slice(2);
 let [bumpType, commitMessage] = args;
+let preId = '';
 
 if (args.includes('-h') || args.includes('--help')) {
   displayHelp();
@@ -66,6 +67,13 @@ if (!bumpType) {
   if (!validBumpTypes.includes(bumpType)) {
     console.log(chalk.red('\nⓧ Invalid version type provided.'));
     await promptBumpType();
+  }
+}
+
+if (bumpType.includes('pre')) {
+  const preIdWanted =  await promptIfPreId();
+  if (preIdWanted) {
+    preId = await promptPreId();
   }
 }
 
@@ -120,7 +128,11 @@ if (stashChanges) {
 let failed = false;
 try {
   await git.add('.');
-  await execa('npm', ['version', bumpType, '-m', `(%s) ${commitMessage}\n\ncommited using @itmr.dev/bump`, '-f']);
+  const npmArgs = ['version', bumpType, '-m', `(%s) ${commitMessage}\n\ncommited using @itmr.dev/bump`, '-f'];
+  if (preId) {
+    npmArgs.push(`--preid=${preId}`);
+  }
+  await execa('npm', npmArgs);
   versionSpinner.success();
 } catch (error) {
   versionSpinner.error();
@@ -189,6 +201,26 @@ async function promptBumpType() {
       choices: validBumpTypes,
     },
   ])).bumpType;
+}
+
+async function promptIfPreId() {
+  return (await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'modifier',
+      message: 'Would you like to add a modifier to the version?',
+    },
+  ])).modifier;
+}
+
+async function promptPreId() {
+  return (await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'modifier',
+      message: 'What modifier would you like to add?',
+    },
+  ])).modifier;
 }
 
 async function promptCommitMessage() {
