@@ -71,9 +71,30 @@ if (!bumpType) {
 }
 
 if (bumpType.includes('pre')) {
-  const preIdWanted =  await promptIfPreId();
+  // Check if there's already a preid in the latest tag
+  let existingPreId = '';
+  try {
+    const latestTagSpinner = createSpinner('checking latest tag', { color: 'gray' });
+    latestTagSpinner.start();
+    const tags = await git.tags();
+    if (tags.all.length > 0) {
+      // Get the latest tag from the list
+      const latestTag = tags.all[tags.all.length - 1];
+      // Extract preid from tag (format: v1.0.0-beta.0 -> beta)
+      const match = latestTag.match(/\d+\.\d+\.\d+-([a-zA-Z]+)(?:\.\d+)?$/);
+      if (match && match[1]) {
+        existingPreId = match[1];
+        if (verbose) console.log(chalk.cyan('ℹ'), chalk.white(`Found existing preid: ${existingPreId}`));
+      }
+    }
+    latestTagSpinner.success();
+  } catch (error) {
+    if (verbose) console.error(chalk.yellow('⚠'), chalk.white('Unable to check latest tag for preid.'), error);
+  }
+
+  const preIdWanted = await promptIfPreId();
   if (preIdWanted) {
-    preId = await promptPreId();
+    preId = await promptPreId(existingPreId);
   }
 }
 
@@ -213,12 +234,13 @@ async function promptIfPreId() {
   ])).modifier;
 }
 
-async function promptPreId() {
+async function promptPreId(defaultPreId = '') {
   return (await inquirer.prompt([
     {
       type: 'input',
       name: 'modifier',
       message: 'What modifier would you like to add?',
+      default: defaultPreId,
     },
   ])).modifier;
 }
