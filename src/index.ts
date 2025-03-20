@@ -16,6 +16,15 @@ const git = simpleGit();
 
 const validBumpTypes = ['major', 'minor', 'patch', 'premajor', 'preminor', 'prepatch', 'prerelease'];
 
+function clearLines(n: number) {
+  if (process.stdout.isTTY) {
+    for (let i = 0; i < n; i++) {
+      process.stdout.moveCursor(0, -1);
+      process.stdout.clearLine(0);
+    }
+  }
+}
+
 const args = process.argv.slice(2);
 let [bumpType, commitMessage] = args;
 let preId = '';
@@ -226,15 +235,20 @@ async function promptBumpType() {
   ]);
 
   if (choice === 'other') {
+    // Clear previous prompt (just the question line)
+    clearLines(1);
+    
     const { otherChoice } = await inquirer.prompt([
       {
         type: 'list',
         name: 'otherChoice',
-        message: 'Select pre-release version type:',
+        message: 'Select pre-release type:',
         choices: [...validBumpTypes.filter(type => type.startsWith('pre')), new inquirer.Separator(), 'back'],
       },
     ]);
     if (otherChoice === 'back') {
+      // Clear pre-release prompt before going back
+      clearLines(1);
       return promptBumpType();
     }
     bumpType = otherChoice;
