@@ -19,16 +19,25 @@ let isExiting = false;
 let cleanup: { type: 'stash' | 'version', data?: any }[] = [];
 
 // Prevent multiple error messages
-function handleExit(code: number) {
+async function handleExit(code: number, error?: any) {
   if (!isExiting) {
     isExiting = true;
+
+    if (cleanup.length > 0) {
+      if (error) {
+        console.error(chalk.red('\nⓧ An error occurred:'));
+        console.error(error);
+      }
+      console.log(chalk.yellow('\nReverting changes...'));
+      await performCleanup();
+      console.log(chalk.green('✔ Changes reverted'));
+    }
+
     process.exit(code);
   }
 }
 
 async function performCleanup() {
-  console.log(chalk.yellow('\n\nCleaning up...'));
-  
   for (const item of cleanup.reverse()) {
     try {
       if (item.type === 'stash') {
@@ -54,22 +63,19 @@ async function performCleanup() {
 process.on('SIGINT', async () => {
   interrupted = true;
   console.log(chalk.yellow('\n\nInterrupted by user'));
-  
-  if (cleanup.length > 0) {
-    await performCleanup();
-    console.log(chalk.green('\n✔ Cleanup completed'));
-  }
-  
-  handleExit(0);
+  await handleExit(0);
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (error) => {
-  // Skip errors during user interruption
+// Handle unhandled errors and promise rejections
+process.on('uncaughtException', async (error) => {
   if (!interrupted && !isExiting) {
-    console.error(chalk.red('\nⓧ An unexpected error occurred:'));
-    console.error(error);
-    handleExit(1);
+    await handleExit(1, error);
+  }
+});
+
+process.on('unhandledRejection', async (error) => {
+  if (!interrupted && !isExiting) {
+    await handleExit(1, error);
   }
 });
 
@@ -219,9 +225,7 @@ async function main() {
       }
     } catch (error) {
       gitStatusSpinner.error();
-      console.error(chalk.red('\nⓧ Unable to check git status.'));
-      if (config.verbose) console.error(error);
-      handleExit(1);
+      await handleExit(1, error);
       return;
     }
 
@@ -246,14 +250,11 @@ async function main() {
       } catch (error) {
         stashingSpinner?.error();
         versionSpinner.error();
-        console.error(chalk.red('\nⓧ Unable to stash your changes.'));
-        if (config.verbose) console.error(error);
-        handleExit(1);
+        await handleExit(1, error);
         return;
       }
     }
 
-    let failed = false;
     try {
       if (!interrupted) {
         await git.add('.');
@@ -271,18 +272,13 @@ async function main() {
         versionSpinner.success();
       } else {
         versionSpinner.warn({ text: 'Version bump cancelled' });
-        failed = true;
+        await handleExit(1);
+        return;
       }
     } catch (error) {
       versionSpinner.error();
-      console.error(chalk.red('\nⓧ Unable to bump version.'));
-      // @ts-ignore
-      if (error.message && error.message.includes('already exists')) {
-        console.log(chalk.red('Tag already exists. Please push the changes manually, fix the package.json or delete it.'));
-      }
-      if (config.verbose) console.error(error);
-      if (!config.stashChanges) handleExit(1);
-      failed = true;
+      await handleExit(1, error);
+      return;
     }
 
     if (config.stashChanges) {
@@ -290,20 +286,11 @@ async function main() {
         stashingSpinner?.update({ text: 'restoring stashed changes' });
         await git.stash(['pop']);
         cleanup = cleanup.filter(item => item.type !== 'stash');
-        if (failed) {
-          stashingSpinner?.clear();
-          console.log(chalk.yellow('⚠ Stashed changes restored. Exiting now…'));
-          handleExit(1);
-          return;
-        } else {
-          stashingSpinner?.success();
-        }
+        stashingSpinner?.success();
       } catch (error) {
         stashingSpinner?.error();
         versionSpinner.error();
-        console.error(chalk.red('\nⓧ Unable to restore stashed changes.'));
-        if (config.verbose) console.error(error);
-        handleExit(1);
+        await handleExit(1, error);
         return;
       }
     }
@@ -330,8 +317,8 @@ async function main() {
       }
     } catch (error) {
       pushSpinner?.error();
-      console.log(chalk.red('\nⓧ Unable to push changes. Please push manually.'));
-      if (config.verbose) console.error(error);
+      await handleExit(1, error);
+      return;
     }
 
     if (!interrupted) {
@@ -340,11 +327,7 @@ async function main() {
     }
 
   } catch (error) {
-    if (!interrupted) {
-      console.error(chalk.red('\nⓧ An unexpected error occurred:'));
-      console.error(error);
-      handleExit(1);
-    }
+    await handleExit(1, error);
   }
 }
 
@@ -479,10 +462,8 @@ async function setupGithubWorkflows() {
 }
 
 // Start the script
-main().catch((error) => {
+main().catch(async (error) => {
   if (!interrupted && !isExiting) {
-    console.error(chalk.red('\nⓧ An unexpected error occurred:'));
-    console.error(error);
-    handleExit(1);
+    await handleExit(1, error);
   }
 });
