@@ -14,6 +14,28 @@ const __dirname = dirname(__filename);
 
 const git = simpleGit();
 
+let interrupted = false;
+
+// Handle Ctrl+C gracefully
+process.on('SIGINT', async () => {
+  interrupted = true;
+  console.log(chalk.yellow('\n\nInterrupted by user'));
+  
+  // If there are stashed changes, try to restore them
+  if (stashChanges) {
+    try {
+      console.log(chalk.yellow('\nRestoring stashed changes...'));
+      await git.stash(['pop']);
+      console.log(chalk.green('✔ Stashed changes restored'));
+    } catch (error) {
+      console.error(chalk.red('ⓧ Failed to restore stashed changes'));
+      if (verbose) console.error(error);
+    }
+  }
+  
+  process.exit(0);
+});
+
 const validBumpTypes = ['major', 'minor', 'patch', 'premajor', 'preminor', 'prepatch', 'prerelease'];
 
 function clearLines(n: number) {
@@ -145,7 +167,13 @@ if (stashChanges) {
   try {
     stashingSpinner = createSpinner('stashing your changes', { color: 'gray' });
     stashingSpinner.start();
-    await git.stash(['push', '-m', `(bump) automated stash from ${new Date().toISOString()}`]);
+    if (!interrupted) {
+      await git.stash(['push', '-m', `(bump) automated stash from ${new Date().toISOString()}`]);
+      stashingSpinner.success();
+    } else {
+      stashingSpinner.warn({ text: 'Stashing cancelled' });
+      process.exit(0);
+    }
   } catch (error) {
     stashingSpinner?.error();
     versionSpinner.error();
@@ -157,13 +185,18 @@ if (stashChanges) {
 
 let failed = false;
 try {
-  await git.add('.');
-  const npmArgs = ['version', bumpType, '-m', `(%s) ${commitMessage}\n\ncommited using @itmr.dev/bump`, '-f'];
-  if (preId) {
-    npmArgs.push(`--preid=${preId}`);
+  if (!interrupted) {
+    await git.add('.');
+    const npmArgs = ['version', bumpType, '-m', `(%s) ${commitMessage}\n\ncommited using @itmr.dev/bump`, '-f'];
+    if (preId) {
+      npmArgs.push(`--preid=${preId}`);
+    }
+    await execa('npm', npmArgs);
+    versionSpinner.success();
+  } else {
+    versionSpinner.warn({ text: 'Version bump cancelled' });
+    failed = true;
   }
-  await execa('npm', npmArgs);
-  versionSpinner.success();
 } catch (error) {
   versionSpinner.error();
   console.error(chalk.red('\nⓧ Unable to bump version.'));
@@ -198,20 +231,22 @@ if (stashChanges) {
 
 let pushSpinner;
 try {
-  const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
-  let remote = await git.remote(['get-url', 'origin']);
-  if (!remote) {
-    console.log(chalk.yellow('\n⚠ Unable to determine remote. Skipping push.'));
-  } else {
-    remote = remote.trim();
-    const push = await promptPushChanges();
-    if (push) {
-      pushSpinner = createSpinner('pushing changes', { color: 'gray' });
-      pushSpinner.start();
-      await git.push(remote, currentBranch);
-      await git.pushTags(remote);
-      await git.fetch();
-      pushSpinner.success();
+  if (!interrupted) {
+    const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
+    let remote = await git.remote(['get-url', 'origin']);
+    if (!remote) {
+      console.log(chalk.yellow('\n⚠ Unable to determine remote. Skipping push.'));
+    } else {
+      remote = remote.trim();
+      const push = await promptPushChanges();
+      if (push) {
+        pushSpinner = createSpinner('pushing changes', { color: 'gray' });
+        pushSpinner.start();
+        await git.push(remote, currentBranch);
+        await git.pushTags(remote);
+        await git.fetch();
+        pushSpinner.success();
+      }
     }
   }
 } catch (error) {
@@ -220,7 +255,9 @@ try {
   if (verbose) console.error(error);
 }
 
-console.log(chalk.green('\n✔ Version bumped successfully!'));
+if (!interrupted) {
+  console.log(chalk.green('\n✔ Version bumped successfully!'));
+}
 
 async function promptBumpType() {
   const mainChoices = ['patch', 'minor', 'major', new inquirer.Separator(), 'other'];
