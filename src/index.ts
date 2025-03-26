@@ -332,6 +332,8 @@ async function main() {
 }
 
 async function promptBumpType(): Promise<string> {
+  if (interrupted) return '';
+  
   const mainChoices = ['patch', 'minor', 'major', new inquirer.Separator(), 'other'];
   
   const { choice } = await inquirer.prompt([
@@ -343,7 +345,9 @@ async function promptBumpType(): Promise<string> {
     },
   ]);
 
-  if (choice === 'other' && !interrupted) {
+  if (interrupted) return '';
+
+  if (choice === 'other') {
     // Clear previous prompt (just the question line)
     clearLines(1);
     
@@ -355,79 +359,93 @@ async function promptBumpType(): Promise<string> {
         choices: [...validBumpTypes.filter(type => type.startsWith('pre')), new inquirer.Separator(), 'back'],
       },
     ]);
-    if (otherChoice === 'back' && !interrupted) {
+
+    if (interrupted) return '';
+
+    if (otherChoice === 'back') {
       // Clear pre-release prompt before going back
       clearLines(1);
       return promptBumpType();
     }
-    return otherChoice;
+
+    return interrupted ? '' : otherChoice;
   }
-  return choice;
+
+  return interrupted ? '' : choice;
 }
 
 async function promptIfPreId(): Promise<boolean> {
-  return (await inquirer.prompt([
+  if (interrupted) return false;
+  const { modifier } = await inquirer.prompt([
     {
       type: 'confirm',
       name: 'modifier',
       message: 'Would you like to add a modifier to the version?',
     },
-  ])).modifier;
+  ]);
+  return interrupted ? false : modifier;
 }
 
 async function promptPreId(defaultPreId = ''): Promise<string> {
-  return (await inquirer.prompt([
+  if (interrupted) return '';
+  const { modifier } = await inquirer.prompt([
     {
       type: 'input',
       name: 'modifier',
       message: 'What modifier would you like to add?',
       default: defaultPreId,
     },
-  ])).modifier;
+  ]);
+  return interrupted ? '' : modifier;
 }
 
 async function promptCommitMessage(): Promise<string> {
-  return (await inquirer.prompt([
+  if (interrupted) return '';
+  const { commitMessage } = await inquirer.prompt([
     {
       type: 'input',
       name: 'commitMessage',
       message: 'What commit message would you like to use?',
       default: 'bump version',
     },
-  ])).commitMessage;
+  ]);
+  return interrupted ? '' : commitMessage;
 }
 
 async function promptCommitChanges(): Promise<boolean> {
-  const confirm = await inquirer.prompt([
+  if (interrupted) return false;
+  const { commitChanges } = await inquirer.prompt([
     {
       type: 'confirm',
       name: 'commitChanges',
       message: 'Would you like to commit these changes with the bump?',
     },
   ]);
-  return confirm.commitChanges;
+  return interrupted ? false : commitChanges;
 }
 
 async function promptContinueEvenThoChanges(): Promise<boolean> {
-  const confirm = await inquirer.prompt([
+  if (interrupted) return false;
+  const { stillContinue } = await inquirer.prompt([
     {
       type: 'confirm',
       name: 'stillContinue',
       message: 'Would you like proceed with the bump, without including your changes?',
     },
   ]);
-  return confirm.stillContinue;
+  return interrupted ? false : stillContinue;
 }
 
 async function promptPushChanges(): Promise<boolean> {
-  const confirm = await inquirer.prompt([
+  if (interrupted) return false;
+  const { pushChanges } = await inquirer.prompt([
     {
       type: 'confirm',
       name: 'pushChanges',
       message: 'Would you like to push these changes to the remote?',
     },
   ]);
-  return confirm.pushChanges;
+  return interrupted ? false : pushChanges;
 }
 
 function displayHelp() {
