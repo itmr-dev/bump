@@ -45,6 +45,7 @@ async function checkForUpdates() {
       // Draw box with content
       console.log('\n' + chalk.yellow('┌' + '─'.repeat(boxWidth) + '┐'));
       console.log(chalk.yellow('│') + line1 + chalk.yellow('│'));
+      console.log(chalk.yellow('│') + ' '.repeat(boxWidth) + chalk.yellow('│')); // Empty line after title
       console.log(chalk.yellow('│') + line2 + chalk.yellow('│'));
       console.log(chalk.yellow('│') + line3 + chalk.yellow('│'));
       console.log(chalk.yellow('│') + line4 + chalk.yellow('│'));
