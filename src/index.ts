@@ -22,8 +22,34 @@ async function checkForUpdates() {
   try {
     const { version: latestVersion } = await packageJsonFetch('@itmr.dev/bump');
     if (latestVersion !== packageVersion) {
-      console.log(chalk.yellow('ⓘ Update available:'), chalk.cyan(packageVersion), '→', chalk.green(latestVersion));
-      console.log(chalk.gray('Run npm install -g @itmr.dev/bump to update\n'));
+      const boxWidth = 48;
+      const updateMsg = 'Update available!';
+      const padding = Math.floor((boxWidth - updateMsg.length) / 2);
+
+      const updateCommand = 'npm install -g @itmr.dev/bump';
+      const runPadding = Math.floor((boxWidth - updateCommand.length - 5) / 2);
+
+      // Create centered version display
+      const line1 = ' '.repeat(padding) + chalk.bold.white(updateMsg) + ' '.repeat(boxWidth - updateMsg.length - padding);
+      
+      // Version display with fixed column and consistent spacing
+      // Version display with fixed spacing and equal width labels
+      const labelWidth = 8; // "Current"/"Latest" length
+      const versionColumn = 16; // Position where versions start
+      
+      const line2 = ' '.repeat(versionColumn - labelWidth) + chalk.white('Current ') + chalk.cyan(packageVersion) + ' '.repeat(boxWidth - versionColumn - packageVersion.length);
+      const line3 = ' '.repeat(versionColumn - labelWidth) + chalk.white('Latest  ') + chalk.green(latestVersion) + ' '.repeat(boxWidth - versionColumn - latestVersion.length);
+      const line4 = ' '.repeat(boxWidth);
+      const line5 = ' '.repeat(runPadding) + chalk.white('$ ' + updateCommand) + ' '.repeat(boxWidth - updateCommand.length - runPadding - 2);
+      
+      // Draw box with content
+      console.log('\n' + chalk.yellow('┌' + '─'.repeat(boxWidth) + '┐'));
+      console.log(chalk.yellow('│') + line1 + chalk.yellow('│'));
+      console.log(chalk.yellow('│') + line2 + chalk.yellow('│'));
+      console.log(chalk.yellow('│') + line3 + chalk.yellow('│'));
+      console.log(chalk.yellow('│') + line4 + chalk.yellow('│'));
+      console.log(chalk.yellow('│') + line5 + chalk.yellow('│'));
+      console.log(chalk.yellow('└' + '─'.repeat(boxWidth) + '┘\n'));
     }
   } catch (error) {
     if (process.env.VERBOSE) console.error(chalk.yellow('⚠'), chalk.white('Unable to check for updates.'), error);
@@ -140,7 +166,9 @@ async function main() {
 
     if (config.verbose) console.log(chalk.cyan('ℹ'), chalk.white('verbose logging enabled'));
 
-    await checkForUpdates();
+    if (!args.includes('--help')) {
+      await checkForUpdates();
+    }
 
     if (args.includes('--setup-workflows')) {
       const spinner = createSpinner('Setting up GitHub workflows', { color: 'gray' });
