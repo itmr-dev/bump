@@ -16,6 +16,7 @@ const git = simpleGit();
 
 let interrupted = false;
 let isExiting = false;
+let cleanup: { type: 'stash' | 'version', data?: any }[] = [];
 
 // Prevent multiple error messages
 function handleExit(code: number) {
@@ -25,13 +26,41 @@ function handleExit(code: number) {
   }
 }
 
-// Handle Ctrl+C gracefully
-process.on('SIGINT', () => {
-  interrupted = true;
-  if (!isExiting) {
-    console.log(chalk.yellow('\n\nInterrupted by user'));
-    handleExit(0);
+async function performCleanup() {
+  console.log(chalk.yellow('\n\nCleaning up...'));
+  
+  for (const item of cleanup.reverse()) {
+    try {
+      if (item.type === 'stash') {
+        const spinner = createSpinner('Restoring stashed changes').start();
+        await git.stash(['pop']);
+        spinner.success({ text: 'Stashed changes restored' });
+      } else if (item.type === 'version') {
+        const spinner = createSpinner('Reverting version changes').start();
+        await git.reset(['--hard', 'HEAD~1']);
+        if (item.data?.tag) {
+          await git.tag(['--delete', item.data.tag]);
+        }
+        spinner.success({ text: 'Version changes reverted' });
+      }
+    } catch (error) {
+      console.error(chalk.red(`Failed to cleanup ${item.type}`));
+      if (process.env.VERBOSE) console.error(error);
+    }
   }
+}
+
+// Handle Ctrl+C gracefully
+process.on('SIGINT', async () => {
+  interrupted = true;
+  console.log(chalk.yellow('\n\nInterrupted by user'));
+  
+  if (cleanup.length > 0) {
+    await performCleanup();
+    console.log(chalk.green('\n✔ Cleanup completed'));
+  }
+  
+  handleExit(0);
 });
 
 // Handle unhandled promise rejections
@@ -82,6 +111,7 @@ async function main() {
 
     if (args.includes('--verbose') || args.includes('-v')) {
       config.verbose = true;
+      process.env.VERBOSE = 'true';
     }
 
     console.log(chalk.cyan('ℹ'), chalk.white('Welcome to bump!'));
@@ -207,6 +237,7 @@ async function main() {
         stashingSpinner.start();
         if (!interrupted) {
           await git.stash(['push', '-m', `(bump) automated stash from ${new Date().toISOString()}`]);
+          cleanup.push({ type: 'stash' });
           stashingSpinner.success();
         } else {
           stashingSpinner.warn({ text: 'Stashing cancelled' });
@@ -230,7 +261,13 @@ async function main() {
         if (config.preId) {
           npmArgs.push(`--preid=${config.preId}`);
         }
+        // Get current version before bump
+        const { stdout: newTag } = await execa('npm', ['version', '--no-git-tag-version', '--no-commit-hooks', config.bumpType]);
+        // Reset the version change
+        await execa('git', ['checkout', 'package.json']);
+        // Now do the actual bump
         await execa('npm', npmArgs);
+        cleanup.push({ type: 'version', data: { tag: newTag.trim() } });
         versionSpinner.success();
       } else {
         versionSpinner.warn({ text: 'Version bump cancelled' });
@@ -252,6 +289,7 @@ async function main() {
       try {
         stashingSpinner?.update({ text: 'restoring stashed changes' });
         await git.stash(['pop']);
+        cleanup = cleanup.filter(item => item.type !== 'stash');
         if (failed) {
           stashingSpinner?.clear();
           console.log(chalk.yellow('⚠ Stashed changes restored. Exiting now…'));
@@ -297,6 +335,7 @@ async function main() {
     }
 
     if (!interrupted) {
+      cleanup = []; // Clear cleanup as everything succeeded
       console.log(chalk.green('\n✔ Version bumped successfully!'));
     }
 
