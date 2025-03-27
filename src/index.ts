@@ -5,7 +5,7 @@ import { execa } from 'execa';
 import inquirer from 'inquirer';
 import { createSpinner } from 'nanospinner';
 import { simpleGit } from 'simple-git';
-import { existsSync, mkdirSync, copyFileSync, readFileSync } from 'fs';
+import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import packageJsonFetch from 'package-json';
@@ -18,7 +18,48 @@ const git = simpleGit();
 const pkgJson = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'));
 const packageVersion = pkgJson.version;
 
+interface BumpRcConfig {
+  updates: {
+    check: boolean;
+    autoUpdate: boolean;
+  };
+}
+
+function getConfig(): BumpRcConfig {
+  const defaultConfig: BumpRcConfig = {
+    updates: {
+      check: true,
+      autoUpdate: false
+    }
+  };
+
+  const configPath = join(process.env.HOME || '', '.bumprc');
+  
+  try {
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, 'utf8'));
+      return { ...defaultConfig, ...config };
+    } else {
+      writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf8');
+    }
+  } catch (error) {
+    if (process.env.VERBOSE) {
+      console.error(chalk.yellow('⚠'), chalk.white('Error reading config file:'), error);
+    }
+  }
+  
+  return defaultConfig;
+}
+
 async function checkForUpdates() {
+  const config = getConfig();
+  if (!config.updates.check) {
+    if (process.env.VERBOSE) {
+      console.log(chalk.grey('Update checks disabled via .bumprc'));
+    }
+    return;
+  }
+
   const spinner = createSpinner('Checking for updates...').start();
   try {
     const { version: latestVersion } = await packageJsonFetch('@itmr.dev/bump');
@@ -31,19 +72,25 @@ async function checkForUpdates() {
     }, 0) > 0;
 
     if (isNewer) {
-      spinner.update({ text: 'Updating to latest version...' });
-      try {
-        await execa('npm', ['install', '-g', '@itmr.dev/bump']);
+      if (config.updates.autoUpdate) {
+        spinner.update({ text: 'Updating to latest version...' });
+        try {
+          await execa('npm', ['install', '-g', '@itmr.dev/bump']);
+          spinner.stop();
+          clearLines(1); // Remove spinner line
+          console.log(chalk.green(`✔ Updated to version ${latestVersion}! Please run your command again.`));
+          process.exit(0); // Exit and let user run their command again with updated version
+        } catch (error) {
+          spinner.stop();
+          clearLines(1); // Remove spinner line
+          console.log(chalk.red('⨯ Failed to update automatically.'));
+          if (process.env.VERBOSE) console.error(error);
+          process.exit(1);
+        }
+      } else {
         spinner.stop();
-        clearLines(1); // Remove spinner line
-        console.log(chalk.green(`✔ Updated to version ${latestVersion}! Please run your command again.`));
-        process.exit(0); // Exit and let user run their command again with updated version
-      } catch (error) {
-        spinner.stop();
-        clearLines(1); // Remove spinner line
-        console.log(chalk.red('⨯ Failed to update automatically.'));
-        if (process.env.VERBOSE) console.error(error);
-        process.exit(1);
+        clearLines(1);
+        console.log(chalk.yellow('⚠'), chalk.white(`New version ${latestVersion} is available! Run 'npm install -g @itmr.dev/bump' to update.`));
       }
     } else {
       spinner.stop();
@@ -136,7 +183,7 @@ function clearLines(n: number) {
   }
 }
 
-interface BumpConfig {
+interface BumpCommandConfig {
   bumpType: string;
   commitMessage: string;
   preId: string;
@@ -147,7 +194,7 @@ interface BumpConfig {
 async function main() {
   try {
     const args = process.argv.slice(2);
-    const config: BumpConfig = {
+    const config: BumpCommandConfig = {
       bumpType: args[0],
       commitMessage: args[1],
       preId: '',
@@ -171,7 +218,7 @@ async function main() {
     if (config.verbose) console.log(chalk.cyan('ℹ'), chalk.white('verbose logging enabled'));
 
     if (!args.includes('--help')) {
-      await checkForUpdates(); // Always auto-update
+      await checkForUpdates(); // Check for updates (configurable via ~/.bumprc)
     }
 
     if (args.includes('--setup-workflows')) {
@@ -499,6 +546,12 @@ async function promptPushChanges(): Promise<boolean> {
 }
 
 function displayHelp() {
+  console.log(chalk.cyan('Configuration:'));
+  console.log('  ~/.bumprc                Configure update behavior');
+  console.log('    {"updates": {');
+  console.log('      "check": true,       Enable/disable update checks');
+  console.log('      "autoUpdate": false  Enable/disable automatic updates');
+  console.log('    }}\n');
   console.log(chalk.green('Usage: bump [options] <version-type> [commitMessage]'));
   console.log('\nVersion types:');
   console.log('  patch|minor|major       Standard version increments');
