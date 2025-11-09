@@ -23,6 +23,9 @@ interface BumpRcConfig {
     check: boolean;
     autoUpdate: boolean;
   };
+  branches: {
+    allowed: string[];
+  };
 }
 
 function getConfig(): BumpRcConfig {
@@ -30,6 +33,9 @@ function getConfig(): BumpRcConfig {
     updates: {
       check: true,
       autoUpdate: false
+    },
+    branches: {
+      allowed: ['main', 'master']
     }
   };
 
@@ -38,7 +44,14 @@ function getConfig(): BumpRcConfig {
   try {
     if (existsSync(configPath)) {
       const config = JSON.parse(readFileSync(configPath, 'utf8'));
-      return { ...defaultConfig, ...config };
+      return { 
+        ...defaultConfig, 
+        ...config,
+        branches: {
+          ...defaultConfig.branches,
+          ...config.branches
+        }
+      };
     } else {
       writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf8');
     }
@@ -314,17 +327,20 @@ async function main() {
 
     try {
       const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
-      const allowedBranches = ['main', 'master'];
+      const bumpConfig = getConfig();
+      const allowedBranches = bumpConfig.branches.allowed;
       const isAllowedBranch = allowedBranches.includes(currentBranch.trim());
       
       branchSpinner.success();
       
       if (!isAllowedBranch && !config.forceBranch) {
         console.log(chalk.red(`\nⓧ Cannot bump version on branch '${currentBranch.trim()}'.`));
-        console.log(chalk.red('Version bumping is only allowed on main or master branches.'));
-        console.log(chalk.cyanBright('Please switch to main or master branch before bumping'));
-        console.log(chalk.cyanBright('or use --force-branch to override this check:'));
+        console.log(chalk.red(`Version bumping is only allowed on: ${allowedBranches.join(', ')}`));
+        console.log(chalk.cyan('Please switch to an allowed branch before bumping'));
+        console.log(chalk.cyan(`(${allowedBranches.join(', ')})`));
+        console.log(chalk.cyan('or use --force-branch to override this check:'));
         console.log(chalk.cyan(`  bump --force-branch ${config.bumpType} "${config.commitMessage}"`));
+        console.log(chalk.cyan('Or edit ~/.bumprc to configure allowed branches.'));
         console.log(chalk.red('Aborting...'));
         handleExit(1);
         return;
@@ -336,6 +352,7 @@ async function main() {
       
       if (config.verbose) {
         console.log(chalk.cyan('ℹ'), chalk.white(`Current branch: ${currentBranch.trim()}`));
+        console.log(chalk.cyan('ℹ'), chalk.white(`Allowed branches: ${allowedBranches.join(', ')}`));
       }
     } catch (error) {
       branchSpinner.error();
@@ -608,10 +625,16 @@ function displayHelp() {
   console.log('\nBranch Protection:');
   console.log('  By default, version bumping is only allowed on main or master branches.');
   console.log('  Use --force-branch to override this safety check and bump on any branch.');
+  console.log('  Configure allowed branches by editing the branches.allowed array in ~/.bumprc');
   console.log('\nConfiguration:');
   console.log('  bump uses the .bumprc file in your home directory to store configuration settings.');
-  console.log('  You can disable update checks and enable auto-updates by editing this file.');
+  console.log('  You can disable update checks, enable auto-updates, and configure allowed branches.');
   console.log('  To edit the file open it in your favorite text editor (e.g.',chalk.italic('vim ~/.bumprc'),')');
+  console.log('\n  Example .bumprc:');
+  console.log(chalk.gray('  {'));
+  console.log(chalk.gray('    "updates": { "check": true, "autoUpdate": false },'));
+  console.log(chalk.gray('    "branches": { "allowed": ["main", "master", "develop"] }'));
+  console.log(chalk.gray('  }'));
   console.log(chalk.dim.italic.gray('  But how do I exit vim... ¯\\_(ツ)_/¯'));
 }
 
