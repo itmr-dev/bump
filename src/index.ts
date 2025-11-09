@@ -32,7 +32,7 @@ function getConfig(): BumpRcConfig {
   const defaultConfig: BumpRcConfig = {
     updates: {
       check: true,
-      autoUpdate: false
+      autoUpdate: true
     },
     branches: {
       allowed: ['main', 'master']
