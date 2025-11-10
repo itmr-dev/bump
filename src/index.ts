@@ -92,6 +92,7 @@ async function checkForUpdates() {
           spinner.stop();
           clearLines(1); // Remove spinner line
           console.log(chalk.green(`✔ Updated to version ${latestVersion}! Please run your command again.`));
+          console.log(chalk.grey('Tip: You can disable automatic updates by setting "autoUpdate" to false in ~/.bumprc'));
           process.exit(0); // Exit and let user run their command again with updated version
         } catch (error) {
           spinner.stop();
