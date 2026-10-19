@@ -62,9 +62,9 @@ function jsonAdapter(name: string, file: string, depth: number, get: (o: any) =>
   return a;
 }
 
-// `version = "x"` inside a TOML [section]; stops at the next line starting with [
+// `version = "x"` inside a TOML [section]; stops at the next (possibly indented) [header]
 function tomlPattern(sections: string) {
-  return new RegExp(String.raw`^\[(?:${sections})\][^\S\n]*\r?\n(?:(?!\[)[^\n]*\n)*?[^\S\n]*version\s*=\s*"([^"]+)"`, 'm');
+  return new RegExp(String.raw`^\[(?:${sections})\][^\S\n]*(?:#[^\n]*)?\r?\n(?:(?![^\S\n]*\[)[^\n]*\n)*?[^\S\n]*version\s*=\s*"([^"]+)"`, 'm');
 }
 
 function patternAdapter(name: string, file: string, pattern: RegExp, extra: Partial<Adapter> = {}): Adapter {
@@ -141,7 +141,10 @@ export function detect(cwd: string): VersionFile[] {
   const found: VersionFile[] = [];
   for (const adapter of [...builtins, ...loadRepoAdapters(cwd)]) {
     const path = join(cwd, adapter.file);
-    if (!existsSync(path)) continue;
+    if (!existsSync(path)) {
+      if (adapter.strict) throw new Error(`.bump.json: ${adapter.file} not found`);
+      continue;
+    }
     const current = readVersion(adapter, readFileSync(path, 'utf8'));
     if (current !== null) found.push({ adapter, path, current });
   }

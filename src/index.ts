@@ -169,11 +169,17 @@ async function performCleanup() {
         spinner.success({ text: 'Stashed changes restored' });
       } else if (item.type === 'version') {
         const spinner = createSpinner('Reverting version changes').start();
-        if (item.data?.committed) {
-          await git.reset(['--hard', 'HEAD~1']);
-        } else if (item.data?.paths?.length) {
-          await git.checkout(['HEAD', '--', ...item.data.paths]);
+        // never --hard: a mixed reset to where bump started drops the bump commit (and any
+        // commit an npm script made) but keeps every file on disk, so no work is lost
+        if (item.data?.committed && item.data.base) {
+          const dropped = (await git.revparse(['HEAD'])).trim();
+          await git.reset(['-q', item.data.base]);
+          console.log(chalk.grey(`\n  dropped commit ${dropped.slice(0, 7)}, recover it with: git reset --hard ${dropped}`));
+        } else {
+          await git.reset(['-q']);
         }
+        // put back what was on disk before the bump, not HEAD: may include uncommitted edits or untracked files
+        for (const { path, text } of item.data?.originals ?? []) writeFileSync(path, text);
         if (item.data?.tag) {
           await git.tag(['--delete', item.data.tag]);
         }
@@ -457,11 +463,13 @@ async function main() {
       if (!interrupted) {
         const hasNpm = versionFiles.some(f => f.adapter.name === 'npm');
         const message = `(${newVersion}) ${config.commitMessage}\n\ncommited using @itmr.dev/bump`;
-        const versionCleanup = { type: 'version' as const, data: { paths: versionFiles.map(f => f.path), committed: false, tag: '' } };
+        const versionCleanup = { type: 'version' as const, data: { base: (await git.revparse(['HEAD']).catch(() => '')).trim(), originals: [] as { path: string; text: string }[], committed: false, tag: '' } };
         cleanup.push(versionCleanup);
         if (hasNpm) await runNpmScript('preversion');
         for (const f of versionFiles) {
-          writeFileSync(f.path, writeVersion(f.adapter, readFileSync(f.path, 'utf8'), newVersion));
+          const original = readFileSync(f.path, 'utf8');
+          versionCleanup.data.originals.push({ path: f.path, text: original });
+          writeFileSync(f.path, writeVersion(f.adapter, original, newVersion));
           const written = readVersion(f.adapter, readFileSync(f.path, 'utf8'));
           if (parseVersion(written ?? '') !== newVersion) throw new Error(`${f.adapter.file}: expected ${newVersion} after writing, found ${written}`);
         }
@@ -469,7 +477,8 @@ async function main() {
         await git.add('.');
         // tag-only mode with a clean tree: just tag, no empty commit
         if ((await git.status()).staged.length > 0) {
-          await git.commit(message);
+          // simple-git resolves when a silent pre-commit hook rejects the commit
+          if (!(await git.commit(message)).commit) throw new Error('git commit failed (rejected by a hook?)');
           versionCleanup.data.committed = true;
         }
         await git.tag(['-a', `v${newVersion}`, '-m', message]);

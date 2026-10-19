@@ -57,6 +57,17 @@ test('cargo virtual workspace / member with version.workspace is skipped', () =>
   assert.equal(readVersion(by('cargo'), '[package]\nname = "a"\nversion.workspace = true\n'), null);
 });
 
+test('cargo: indented sub-table ends the [package] section', () => {
+  assert.equal(readVersion(by('cargo'), '[package]\nname = "x"\n  [package.metadata.x]\n  version = "0.1"\n'), null);
+});
+
+test('cargo: comment after the section header', () => roundtrip('cargo', '[package] # main crate\nname = "x"\nversion = "0.3.0"\n', '0.3.0'));
+
+test('.bump.json entry with a missing file aborts', () => {
+  const dir = tmp({ '.bump.json': JSON.stringify({ files: [{ path: 'platformio.inii', pattern: 'v=(\\S+)' }] }) });
+  assert.throws(() => detect(dir), /\.bump\.json.*platformio\.inii/);
+});
+
 test('python [project] and [tool.poetry]', () => {
   roundtrip('python', '[project]\nname = "x"\nversion = "0.1.0"\n\n[tool.ruff]\nline-length = 100\n', '0.1.0');
   roundtrip('python', '[tool.poetry]\nname = "x"\nversion = "0.1.0"\n', '0.1.0');

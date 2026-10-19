@@ -131,7 +131,7 @@ What non-interactive mode does:
 - The self-update check is skipped, so bump never exits early to update itself mid-pipeline.
 - Unknown options exit `1` rather than being silently ignored.
 
-Exit code is `0` on success and `1` on failure, and any partial bump is rolled back (version commit and tag removed, stashed changes restored).
+Exit code is `0` on success and `1` on failure, and any partial bump is rolled back (version commit and tag removed, version files restored, stashed changes restored). The rollback never discards files: edits you had in the working tree are kept, and the dropped commit is printed so it can be recovered.
 
 ## Contributing
 
