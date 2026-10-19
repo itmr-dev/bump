@@ -10,6 +10,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import packageJsonFetch from 'package-json';
 import { parseArgs } from './args.js';
+import { detect, readVersion, writeVersion, VersionFile } from './adapters.js';
+import { parseVersion, nextVersion, highestTag } from './version.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -132,6 +134,13 @@ let nonInteractive = false;
 let isExiting = false;
 let cleanup: { type: 'stash' | 'version', data?: any }[] = [];
 
+async function runNpmScript(name: string) {
+  const scripts = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).scripts ?? {};
+  if (!scripts[name]) return;
+  const { stdout } = await execa('npm', ['run', name]);
+  if (process.env.VERBOSE) console.log(stdout);
+}
+
 // Prevent multiple error messages
 async function handleExit(code: number, error?: any) {
   if (!isExiting) {
@@ -160,7 +169,11 @@ async function performCleanup() {
         spinner.success({ text: 'Stashed changes restored' });
       } else if (item.type === 'version') {
         const spinner = createSpinner('Reverting version changes').start();
-        await git.reset(['--hard', 'HEAD~1']);
+        if (item.data?.committed) {
+          await git.reset(['--hard', 'HEAD~1']);
+        } else if (item.data?.paths?.length) {
+          await git.checkout(['HEAD', '--', ...item.data.paths]);
+        }
         if (item.data?.tag) {
           await git.tag(['--delete', item.data.tag]);
         }
@@ -241,15 +254,6 @@ async function main() {
     }
 
     const workdirSpinner = createSpinner('checking working directory', { color: 'gray' });
-    if (!existsSync(join(process.cwd(), 'package.json'))) {
-      workdirSpinner.error();
-      console.log(chalk.red('ⓧ No package.json found in the current directory.'));
-      console.log(chalk.red('Please run bump from the root of your project.'));
-      console.log(chalk.red('Aborting...'));
-      handleExit(1);
-      return;
-    }
-
     const isRepo = await git.checkIsRepo();
     if (!isRepo) {
       workdirSpinner.error();
@@ -259,7 +263,42 @@ async function main() {
       handleExit(1);
       return;
     }
+
+    let versionFiles: VersionFile[];
+    try {
+      versionFiles = detect(process.cwd());
+    } catch (error) {
+      workdirSpinner.error();
+      console.log(chalk.red(`ⓧ ${(error as Error).message}`));
+      console.log(chalk.red('Aborting...'));
+      handleExit(1);
+      return;
+    }
     workdirSpinner.success();
+
+    let currentVersion: string;
+    const checkedFiles = versionFiles.filter(f => !f.adapter.follows);
+    if (checkedFiles.length > 0) {
+      console.log(chalk.cyan('ℹ'), chalk.white(`versions found in: ${versionFiles.map(f => f.adapter.file).join(', ')}`));
+      const invalid = checkedFiles.find(f => !parseVersion(f.current));
+      if (invalid) {
+        console.log(chalk.red(`ⓧ ${invalid.adapter.file} has version '${invalid.current}', which is not a valid version.`));
+        console.log(chalk.red('Aborting...'));
+        handleExit(1);
+        return;
+      }
+      if (new Set(checkedFiles.map(f => parseVersion(f.current))).size > 1) {
+        console.log(chalk.red('ⓧ Version files disagree on the current version:'));
+        for (const f of checkedFiles) console.log(chalk.red(`  ${f.adapter.file} → ${f.current}`));
+        console.log(chalk.red('Aborting...'));
+        handleExit(1);
+        return;
+      }
+      currentVersion = parseVersion(checkedFiles[0].current)!;
+    } else {
+      currentVersion = highestTag((await git.tags()).all) ?? '0.0.0';
+      console.log(chalk.cyan('ℹ'), chalk.white(`no version files found, using git tags only (current: v${currentVersion})`));
+    }
 
     if (!validBumpTypes.includes(config.bumpType)) {
       console.log(chalk.red(config.bumpType ? '\nⓧ Invalid version type provided.' : '\nⓧ No version type provided.'));
@@ -381,6 +420,15 @@ async function main() {
 
     if (interrupted) return;
 
+    let newVersion: string;
+    try {
+      newVersion = nextVersion(currentVersion, config.bumpType, config.preId);
+    } catch (error) {
+      console.log(chalk.red(`ⓧ ${(error as Error).message}`));
+      handleExit(1);
+      return;
+    }
+
     const versionSpinner = createSpinner('bumping version', { color: 'gray' });
     versionSpinner.start();
 
@@ -407,19 +455,27 @@ async function main() {
 
     try {
       if (!interrupted) {
-        await git.add('.');
-        const npmArgs = ['version', config.bumpType, '-m', `(%s) ${config.commitMessage}\n\ncommited using @itmr.dev/bump`, '-f'];
-        if (config.preId) {
-          npmArgs.push(`--preid=${config.preId}`);
+        const hasNpm = versionFiles.some(f => f.adapter.name === 'npm');
+        const message = `(${newVersion}) ${config.commitMessage}\n\ncommited using @itmr.dev/bump`;
+        const versionCleanup = { type: 'version' as const, data: { paths: versionFiles.map(f => f.path), committed: false, tag: '' } };
+        cleanup.push(versionCleanup);
+        if (hasNpm) await runNpmScript('preversion');
+        for (const f of versionFiles) {
+          writeFileSync(f.path, writeVersion(f.adapter, readFileSync(f.path, 'utf8'), newVersion));
+          const written = readVersion(f.adapter, readFileSync(f.path, 'utf8'));
+          if (parseVersion(written ?? '') !== newVersion) throw new Error(`${f.adapter.file}: expected ${newVersion} after writing, found ${written}`);
         }
-        // Get current version before bump
-        const { stdout: newTag } = await execa('npm', ['version', '--no-git-tag-version', '--no-commit-hooks', config.bumpType]);
-        // Reset the version change
-        await execa('git', ['checkout', 'package.json']);
-        // Now do the actual bump
-        await execa('npm', npmArgs);
-        cleanup.push({ type: 'version', data: { tag: newTag.trim() } });
-        versionSpinner.success();
+        if (hasNpm) await runNpmScript('version');
+        await git.add('.');
+        // tag-only mode with a clean tree: just tag, no empty commit
+        if ((await git.status()).staged.length > 0) {
+          await git.commit(message);
+          versionCleanup.data.committed = true;
+        }
+        await git.tag(['-a', `v${newVersion}`, '-m', message]);
+        versionCleanup.data.tag = `v${newVersion}`;
+        if (hasNpm) await runNpmScript('postversion');
+        versionSpinner.success({ text: `bumped ${currentVersion} → ${newVersion}` });
       } else {
         versionSpinner.warn({ text: 'Version bump cancelled' });
         await handleExit(1);
@@ -604,6 +660,12 @@ function displayHelp() {
   console.log('\nArguments:');
   console.log('  <version-type>         Type of version bump to apply (see Version types above)');
   console.log('  [commitMessage]        Optional commit message (default: "bump version")');
+  console.log('\nSupported projects:');
+  console.log('  package.json (+ package-lock.json), app.json (Expo), library.json (PlatformIO),');
+  console.log('  library.properties (Arduino), Cargo.toml, pyproject.toml, pubspec.yaml, Chart.yaml.');
+  console.log('  Every file found is bumped. With none, bump uses git tags only.');
+  console.log('  Other files: add a .bump.json to the repo root, e.g.');
+  console.log(chalk.gray('  { "files": [{ "path": "platformio.ini", "pattern": "custom_version\\\\s*=\\\\s*(\\\\S+)" }] }'));
   console.log('\nNon-interactive (CI / AI agents):');
   console.log('  bump never prompts when stdin is not a TTY, when CI is set, or with --yes.');
   console.log('  In that mode the version type is required, the commit message defaults to');

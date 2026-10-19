@@ -9,11 +9,12 @@
 <a href="https://github.com/itmr-dev/bump/issues"><img src="https://img.shields.io/github/issues/itmr-dev/bump" alt="issues - bump"></a>
 </p>
 
-Welcome to Bump, a command-line tool designed to automate the process of version bumping in your package.json and applying git tags. This tool simplifies your workflow, ensuring consistent versioning practices and making your release process smoother and more efficient.
+Welcome to Bump, a command-line tool designed to automate the process of version bumping in your project's version files (package.json, Cargo.toml, pubspec.yaml, library.json and more) and applying git tags. This tool simplifies your workflow, ensuring consistent versioning practices and making your release process smoother and more efficient.
 
 ## Features
 
-- Easy version bumping: Automatically updates the version in your package.json file and applies a git tag.
+- Easy version bumping: Automatically updates the version in your project's version files and applies a git tag.
+- Works beyond npm: Expo, PlatformIO / Arduino libraries, Rust, Python, Flutter, Helm, or any repo with just git tags.
 - Supports semantic versioning: Choose from major, minor, or patch versions.
 - Customizable commit messages: Add a personalized message for the version bump commit.
 - GitHub workflows setup: Optionally set up GitHub workflows for automatic Docker image builds, suitable for CI/CD pipelines.
@@ -71,6 +72,46 @@ Initialize GitHub workflows for Docker:
 ```bash
 bump --setup-workflows
 ```
+
+## Supported projects
+
+bump looks for these files in the current directory and updates every one it finds. If they disagree on the current version, it aborts and lists them.
+
+| File | Version it updates |
+|---|---|
+| `package.json` | top-level `"version"` (plus `package-lock.json`) |
+| `app.json` (Expo) | `expo.version` |
+| `library.json` (PlatformIO) | `"version"` |
+| `library.properties` (Arduino) | `version=` |
+| `Cargo.toml` | `version` in `[package]` or `[workspace.package]` |
+| `pyproject.toml` | `version` in `[project]` or `[tool.poetry]` (skipped for dynamic versions) |
+| `pubspec.yaml` (Flutter) | `version:`, the `+N` build number is incremented too |
+| `Chart.yaml` (Helm) | `version:` (not `appVersion`) |
+
+Only the version text is changed, the rest of the file keeps its formatting. A file that exists but has no version (e.g. a `pyproject.toml` with only tool settings) is skipped.
+
+If no file matches, bump uses **git tags only**: it reads the highest `vX.Y.Z` tag (or starts at `0.0.0`) and creates the next tag. This fits Go modules and PlatformIO firmware that reads its version from `git describe`.
+
+### Custom version files (`.bump.json`)
+
+For a version somewhere else, e.g. a PlatformIO build flag or a header, add a `.bump.json` to the repo root. Each `pattern` is a regex whose first capture group is the version, and it must match exactly once:
+
+```json
+{
+  "files": [
+    { "path": "platformio.ini", "pattern": "custom_version\\s*=\\s*(\\S+)" },
+    { "path": "include/version.h", "pattern": "#define FW_VERSION \"([^\"]+)\"" }
+  ]
+}
+```
+
+### Adding a built-in format
+
+Built-in formats live in [`src/adapters.ts`](src/adapters.ts). Most are one line: a name, a file, and a regex with one capture group. Add a fixture test in `test/adapters.test.js` and open a PR.
+
+### Upgrading from 1.x
+
+bump no longer calls `npm version`. npm's `preversion`, `version` and `postversion` scripts still run, but `.npmrc` settings that `npm version` honoured (`tag-version-prefix`, `sign-git-tag`, `git-tag-version`, `commit-hooks`) are no longer read. Tags are always `v<version>`.
 
 ## Non-interactive use (CI and AI agents)
 
