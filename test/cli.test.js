@@ -121,5 +121,7 @@ test('unsupported Node: clear message before loading anything', () => {
   assert.equal(r.status, 1);
   assert.match(r.stderr.toString(), /Node\.js .*20\.11\.0/);
   assert.match(r.stderr.toString(), /@itmr\.dev\/bump@2\.0\.1/);
+  // 2.0.1 would otherwise auto-update straight back to this version
+  assert.match(r.stderr.toString(), /"autoUpdate": false/);
   assert.doesNotMatch(r.stdout.toString(), /Usage/);
 });
