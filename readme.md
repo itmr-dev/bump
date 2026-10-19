@@ -111,7 +111,8 @@ Built-in formats live in [`src/adapters.ts`](src/adapters.ts). Most are one line
 
 ### Upgrading from 1.x
 
-bump no longer calls `npm version`. npm's `preversion`, `version` and `postversion` scripts still run, but `.npmrc` settings that `npm version` honoured (`tag-version-prefix`, `sign-git-tag`, `git-tag-version`, `commit-hooks`) are no longer read. Tags are always `v<version>`.
+
+See the [CHANGELOG](CHANGELOG.md) for everything that changed in 2.0.0. In short: bump no longer calls `npm version`. npm's `preversion`, `version` and `postversion` scripts still run, but `.npmrc` settings that `npm version` honoured (`tag-version-prefix`, `sign-git-tag`, `git-tag-version`, `commit-hooks`) are no longer read. Tags are always `v<version>`.
 
 ## Non-interactive use (CI and AI agents)
 

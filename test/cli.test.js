@@ -69,3 +69,21 @@ test('silent failing pre-commit hook fails the bump, no tag', () => {
   assert.equal(r.sh('git tag'), '');
   assert.match(r.read('package.json'), /"version": "1\.0\.0"/);
 });
+
+test('upgrade notice: shown once to v1 users, never to new users', () => {
+  const r = repo({ 'package.json': pkg({}) });
+  const run = home => spawnSync('node', [bin, '-y', '--force-branch', '--no-push', 'patch'], { cwd: r.dir, env: { ...process.env, HOME: home, CI: '1' } }).stdout.toString();
+  const rc = home => JSON.parse(readFileSync(join(home, '.bumprc'), 'utf8'));
+
+  // v1 wrote .bumprc without lastVersion
+  const v1Home = mkdtempSync(join(tmpdir(), 'bump-home-'));
+  writeFileSync(join(v1Home, '.bumprc'), JSON.stringify({ updates: { check: true, autoUpdate: false }, branches: { allowed: ['main'] } }));
+  assert.match(run(v1Home), /CHANGELOG\.md/);
+  assert.equal(rc(v1Home).updates.autoUpdate, false, 'user settings are kept');
+  assert.ok(rc(v1Home).lastVersion);
+  assert.doesNotMatch(run(v1Home), /CHANGELOG\.md/);
+
+  const newHome = mkdtempSync(join(tmpdir(), 'bump-home-'));
+  assert.doesNotMatch(run(newHome), /CHANGELOG\.md/);
+  assert.doesNotMatch(run(newHome), /CHANGELOG\.md/);
+});

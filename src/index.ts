@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import packageJsonFetch from 'package-json';
+import semver from 'semver';
 import { parseArgs } from './args.js';
 import { detect, readVersion, writeVersion, VersionFile } from './adapters.js';
 import { parseVersion, nextVersion, highestTag, isNewer } from './version.js';
@@ -20,8 +21,11 @@ const git = simpleGit();
 
 const pkgJson = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'));
 const packageVersion = pkgJson.version;
+const CHANGELOG_URL = 'https://github.com/itmr-dev/bump/blob/main/CHANGELOG.md';
 
 interface BumpRcConfig {
+  /** version of bump that last ran; v1 never wrote it */
+  lastVersion?: string;
   updates: {
     check: boolean;
     autoUpdate: boolean;
@@ -33,6 +37,7 @@ interface BumpRcConfig {
 
 function getConfig(): BumpRcConfig {
   const defaultConfig: BumpRcConfig = {
+    lastVersion: packageVersion,
     updates: {
       check: true,
       autoUpdate: true
@@ -65,6 +70,24 @@ function getConfig(): BumpRcConfig {
   }
   
   return defaultConfig;
+}
+
+// shown once after a major update; a .bumprc without lastVersion was written by v1
+function showMajorUpdateNotice() {
+  const configPath = join(process.env.HOME || '', '.bumprc');
+  try {
+    if (!existsSync(configPath)) return; // first run ever, getConfig records lastVersion
+    const rc = JSON.parse(readFileSync(configPath, 'utf8'));
+    if (rc.lastVersion === packageVersion) return;
+    if (semver.major(packageVersion) > semver.major(rc.lastVersion ?? '1.0.0')) {
+      console.log(chalk.magenta('★'), chalk.white(`bump was updated to v${packageVersion}, a lot has changed.`));
+      console.log(chalk.magenta(' '), chalk.white('What is new and what to watch out for:'), chalk.cyan(CHANGELOG_URL));
+    }
+    rc.lastVersion = packageVersion;
+    writeFileSync(configPath, JSON.stringify(rc, null, 2), 'utf8');
+  } catch (error) {
+    if (process.env.VERBOSE) console.error(chalk.yellow('⚠'), chalk.white('Unable to check last used version.'), error);
+  }
 }
 
 async function checkForUpdates(nonInteractive: boolean) {
@@ -240,6 +263,7 @@ async function main() {
     if (config.verbose) console.log(chalk.cyan('ℹ'), chalk.white('verbose logging enabled'));
     if (nonInteractive) console.log(chalk.cyan('ℹ'), chalk.white('non-interactive mode: prompts are skipped'));
 
+    showMajorUpdateNotice();
     await checkForUpdates(nonInteractive); // Check for updates (configurable via ~/.bumprc)
 
     if (config.setupWorkflows) {
