@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync, execSync } from 'child_process';
+import { spawn, spawnSync, execSync } from 'child_process';
 import { mkdtempSync, writeFileSync, readFileSync, chmodSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -59,6 +59,20 @@ test('rollback undoes commits made by npm scripts without losing their content',
   assert.equal(r.sh('git rev-parse HEAD'), base);
   assert.equal(r.read('CHANGELOG'), 'log\n');
   assert.match(r.read('package.json'), /"version": "1\.0\.0"/);
+});
+
+test('Ctrl+C during the bump rolls back', async () => {
+  const r = repo({ 'package.json': pkg({ version: 'sleep 5' }) });
+  const child = spawn('node', [bin, '-y', '--force-branch', '--no-push', 'patch'], { cwd: r.dir, env: { ...process.env, HOME: r.dir, CI: '1' } });
+  let out = '';
+  child.stdout.on('data', d => { out += d; });
+  // wait until bump is inside the version script, then interrupt it
+  await new Promise(resolve => { const t = setInterval(() => { if (r.read('package.json').includes('1.0.1')) { clearInterval(t); resolve(); } }, 50); });
+  child.kill('SIGINT');
+  await new Promise(resolve => child.on('exit', resolve));
+  assert.match(out, /Changes reverted/);
+  assert.match(r.read('package.json'), /"version": "1\.0\.0"/);
+  assert.equal(r.sh('git tag'), '');
 });
 
 test('silent failing pre-commit hook fails the bump, no tag', () => {

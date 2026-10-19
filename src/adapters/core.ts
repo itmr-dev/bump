@@ -24,7 +24,7 @@ export function find(a: Adapter, text: string, keep: (m: RegExpMatchArray) => bo
 }
 
 export function replaceSpan(text: string, m: RegExpMatchArray, value: string) {
-  const [start, end] = m.indices![1];
+  const [start, end] = m.indices![1]!;
   return text.slice(0, start) + value + text.slice(end);
 }
 

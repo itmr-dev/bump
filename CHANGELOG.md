@@ -1,8 +1,19 @@
 # Changelog
 
-## 2.0.2
+## 3.0.0
 
-- Pin `nanospinner` to 1.1.0. Global installs picked up 1.2.x, whose spinner clears its own line, so bump erased the line above it (the changelog link of the update notice, or "Welcome to bump!"). 1.2.x also exits the process on Ctrl+C while spinning, which could skip bump's rollback.
+### Breaking
+
+- **Requires Node.js 22.13 or newer** (`^22.13.0 || >=23.5.0`). The updated dependencies dropped Node 18 and 20.
+
+### Changed
+
+- **All dependencies updated to their latest versions:** chalk 6, execa 10, inquirer 14, simple-git 4, nanospinner 1.2 and TypeScript 7.
+
+### Fixed
+
+- **The update notice keeps all its lines.** The update spinner erased the line above it: the changelog link of the update notice, or "Welcome to bump!". This happened with nanospinner 1.2, which global installs of 2.x already picked up.
+- **Ctrl+C mid-bump always rolls back.** nanospinner 1.2 exits the process on Ctrl+C while spinning; bump now keeps its own handler in charge so the rollback runs.
 
 ## 2.0.1
 

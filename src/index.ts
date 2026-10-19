@@ -104,7 +104,8 @@ async function checkForUpdates(nonInteractive: boolean) {
     return;
   }
 
-  const spinner = createSpinner('Checking for updates...').start();
+  // nanospinner >= 1.2: stop() without options removes the spinner line, nothing to clear by hand
+  const spinner = startSpinner(createSpinner('Checking for updates...'));
   try {
     const { version: latestVersion } = await packageJsonFetch('@itmr.dev/bump');
     if (isNewer(latestVersion, packageVersion)) {
@@ -113,30 +114,25 @@ async function checkForUpdates(nonInteractive: boolean) {
         try {
           await execa('npm', ['install', '-g', '@itmr.dev/bump']);
           spinner.stop();
-          clearLines(1); // Remove spinner line
           console.log(chalk.green(`✔ Updated to version ${latestVersion}! Please run your command again.`));
           console.log(chalk.grey('Tip: You can disable automatic updates by setting "autoUpdate" to false in ~/.bumprc'));
           process.exit(0); // Exit and let user run their command again with updated version
         } catch (error) {
           spinner.stop();
-          clearLines(1); // Remove spinner line
           console.log(chalk.red('⨯ Failed to update automatically.'));
           if (process.env.VERBOSE) console.error(error);
           process.exit(1);
         }
       } else {
         spinner.stop();
-        clearLines(1);
         console.log(chalk.yellow('⚠'), chalk.white(`New version ${latestVersion} is available! Run 'npm install -g @itmr.dev/bump' to update.`));
       }
     } else {
       spinner.stop();
-      clearLines(1);
       console.log(chalk.grey('You are using the latest version of bump!'));
     }
   } catch (error) {
     spinner.stop();
-    clearLines(1); // Remove spinner line and any blank line
     if (process.env.VERBOSE) {
       console.error(chalk.yellow('⚠'), chalk.white('Unable to check for updates.'));
       console.error(error);
@@ -179,11 +175,11 @@ async function performCleanup() {
   for (const item of cleanup.reverse()) {
     try {
       if (item.type === 'stash') {
-        const spinner = createSpinner('Restoring stashed changes').start();
+        const spinner = startSpinner(createSpinner('Restoring stashed changes'));
         await git.stash(['pop']);
         spinner.success({ text: 'Stashed changes restored' });
       } else if (item.type === 'version') {
-        const spinner = createSpinner('Reverting version changes').start();
+        const spinner = startSpinner(createSpinner('Reverting version changes'));
         // never --hard: a mixed reset to where bump started drops the bump commit (and any
         // commit an npm script made) but keeps every file on disk, so no work is lost
         if (item.data?.committed && item.data.base) {
@@ -205,6 +201,19 @@ async function performCleanup() {
       if (process.env.VERBOSE) console.error(error);
     }
   }
+}
+
+// nanospinner >= 1.2 calls process.exit on Ctrl+C while spinning, which would cut bump's rollback short.
+// Drop the handlers it adds on start so the SIGINT handler below stays in charge.
+function startSpinner<T extends { start(): T }>(spinner: T): T {
+  const before = { SIGINT: process.listeners('SIGINT'), SIGTERM: process.listeners('SIGTERM') };
+  spinner.start();
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    for (const listener of process.listeners(signal)) {
+      if (!before[signal].includes(listener)) process.off(signal, listener);
+    }
+  }
+  return spinner;
 }
 
 // Handle Ctrl+C gracefully
@@ -340,7 +349,7 @@ async function main() {
       let existingPreId = '';
       try {
         const latestTagSpinner = createSpinner('checking latest tag', { color: 'gray' });
-        latestTagSpinner.start();
+        startSpinner(latestTagSpinner);
         const tags = await git.tags();
         if (tags.all.length > 0) {
           // Get the latest tag from the list
@@ -375,7 +384,7 @@ async function main() {
 
     // Check current branch before proceeding
     const branchSpinner = createSpinner('checking current branch', { color: 'gray' });
-    branchSpinner.start();
+    startSpinner(branchSpinner);
 
     try {
       const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
@@ -417,7 +426,7 @@ async function main() {
     if (interrupted) return;
 
     const gitStatusSpinner = createSpinner('checking git status', { color: 'gray' });
-    gitStatusSpinner.start();
+    startSpinner(gitStatusSpinner);
 
     try {
       const gitStatus = await git.status();
@@ -452,13 +461,13 @@ async function main() {
     }
 
     const versionSpinner = createSpinner('bumping version', { color: 'gray' });
-    versionSpinner.start();
+    startSpinner(versionSpinner);
 
     let stashingSpinner;
     if (config.stashChanges) {
       try {
         stashingSpinner = createSpinner('stashing your changes', { color: 'gray' });
-        stashingSpinner.start();
+        startSpinner(stashingSpinner);
         if (!interrupted) {
           await git.stash(['push', '-m', `(bump) automated stash from ${new Date().toISOString()}`]);
           cleanup.push({ type: 'stash' });
@@ -543,7 +552,7 @@ async function main() {
         }
         if (push && !interrupted) {
           pushSpinner = createSpinner('pushing changes', { color: 'gray' });
-          pushSpinner.start();
+          startSpinner(pushSpinner);
           await git.push(remote, currentBranch);
           await git.pushTags(remote);
           await git.fetch();
@@ -573,7 +582,7 @@ async function promptBumpType(): Promise<string> {
   
   const { choice } = await inquirer.prompt([
     {
-      type: 'list',
+      type: 'select',
       name: 'choice',
       message: 'What type of version bump would you like to make?',
       choices: mainChoices,
@@ -588,7 +597,7 @@ async function promptBumpType(): Promise<string> {
     
     const { otherChoice } = await inquirer.prompt([
       {
-        type: 'list',
+        type: 'select',
         name: 'otherChoice',
         message: 'Select pre-release type:',
         choices: [...validBumpTypes.filter(type => type.startsWith('pre')), new inquirer.Separator(), 'back'],

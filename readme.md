@@ -22,7 +22,7 @@ Welcome to Bump, a command-line tool designed to automate the process of version
 
 ## Installation
 
-Bump is available on npm and can be installed globally with the following command:
+Bump requires Node.js 22.13 or newer. It is available on npm and can be installed globally with the following command:
 
 ```bash
 npm install -g @itmr.dev/bump
