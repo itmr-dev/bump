@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { builtins, readVersion, writeVersion, loadRepoAdapters, detect } from '../lib/adapters.js';
+import { builtins, readVersion, writeVersion, loadRepoAdapters, detect } from '../lib/adapters/index.js';
 
 const by = name => builtins.find(a => a.name === name);
 

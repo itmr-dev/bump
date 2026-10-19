@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.1
+
+- Each adapter now lives in its own file under `src/adapters/`, which makes adding a format a single-file PR. No behaviour change.
+
 ## 2.0.0
 
 bump is no longer npm-only. It now finds the version files in your project, bumps all of them, and creates the commit and tag itself instead of calling `npm version`.

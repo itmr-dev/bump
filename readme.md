@@ -107,7 +107,18 @@ For a version somewhere else, e.g. a PlatformIO build flag or a header, add a `.
 
 ### Adding a built-in format
 
-Built-in formats live in [`src/adapters.ts`](src/adapters.ts). Most are one line: a name, a file, and a regex with one capture group. Add a fixture test in `test/adapters.test.js` and open a PR.
+Each built-in format is one file in [`src/adapters/`](src/adapters). Most are a name, a file, and a regex with one capture group:
+
+```ts
+// src/adapters/zig.ts
+import { Adapter } from './core.js';
+
+const zig: Adapter = { name: 'zig', file: 'build.zig.zon', pattern: /^\s*\.version\s*=\s*"([^"]+)"/m };
+
+export default zig;
+```
+
+Register it in the `builtins` list in [`src/adapters/index.ts`](src/adapters/index.ts), add a fixture test in `test/adapters.test.js`, and open a PR. Formats a single regex can't express can provide their own `read` / `write` (see `flutter.ts`), and [`core.ts`](src/adapters/core.ts) has helpers for JSON and TOML.
 
 ### Upgrading from 1.x
 
