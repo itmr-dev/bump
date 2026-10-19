@@ -43,7 +43,14 @@ bump <version_type> [commit_message]
 ### Options
 
 - -h, --help: Displays help information and available options.
+- -v, --verbose: Enable verbose logging.
+- -y, --yes: Never prompt, use defaults. Implied when stdin is not a TTY or when `CI` is set.
+- --preid <id>: Pre-release identifier, e.g. `--preid beta`.
+- --push / --no-push: Push (or don't push) the commit and tags without asking.
+- --force-branch: Allow bumping on branches other than the allowed ones.
 - --setup-workflows: Sets up GitHub workflows for automatic Docker image builds, enhancing your CI/CD pipeline.
+
+Options may appear anywhere, before or after the arguments.
 
 ### Example Commands
 
@@ -64,6 +71,26 @@ Initialize GitHub workflows for Docker:
 ```bash
 bump --setup-workflows
 ```
+
+## Non-interactive use (CI and AI agents)
+
+Bump never prompts when stdin is not a TTY, when `CI` is set, or when you pass `--yes`. In that mode it is safe to run unattended:
+
+```bash
+bump patch "release" --push
+bump prerelease "nightly" --preid beta --push
+```
+
+What non-interactive mode does:
+
+- The version type is required, an invalid or missing one exits `1` instead of opening a menu.
+- The commit message defaults to `bump version`.
+- Uncommitted changes are included in the bump commit.
+- Nothing is pushed unless you pass `--push`.
+- The self-update check is skipped, so bump never exits early to update itself mid-pipeline.
+- Unknown options exit `1` rather than being silently ignored.
+
+Exit code is `0` on success and `1` on failure, and any partial bump is rolled back (version commit and tag removed, stashed changes restored).
 
 ## Contributing
 

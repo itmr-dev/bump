@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import packageJsonFetch from 'package-json';
+import { parseArgs } from './args.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -64,8 +65,13 @@ function getConfig(): BumpRcConfig {
   return defaultConfig;
 }
 
-async function checkForUpdates() {
+async function checkForUpdates(nonInteractive: boolean) {
   const config = getConfig();
+  if (nonInteractive) {
+    // agents and CI want the bump they asked for, not a self-update that exits 0
+    if (process.env.VERBOSE) console.log(chalk.grey('Update check skipped in non-interactive mode'));
+    return;
+  }
   if (!config.updates.check) {
     if (process.env.VERBOSE) {
       console.log(chalk.grey('Update checks disabled via .bumprc'));
@@ -122,6 +128,7 @@ async function checkForUpdates() {
 }
 
 let interrupted = false;
+let nonInteractive = false;
 let isExiting = false;
 let cleanup: { type: 'stash' | 'version', data?: any }[] = [];
 
@@ -197,51 +204,34 @@ function clearLines(n: number) {
   }
 }
 
-interface BumpCommandConfig {
-  bumpType: string;
-  commitMessage: string;
-  preId: string;
-  verbose: boolean;
-  stashChanges: boolean;
-  forceBranch: boolean;
-}
-
 async function main() {
   try {
-    const args = process.argv.slice(2);
-    const config: BumpCommandConfig = {
-      bumpType: args[0],
-      commitMessage: args[1],
-      preId: '',
-      verbose: false,
-      stashChanges: false,
-      forceBranch: false
-    };
+    const config = parseArgs(process.argv.slice(2), Boolean(process.stdin.isTTY) && !process.env.CI);
+    nonInteractive = config.nonInteractive;
 
-    if (args.includes('-h') || args.includes('--help')) {
+    if (config.help) {
       displayHelp();
       handleExit(0);
       return;
     }
 
-    if (args.includes('--verbose') || args.includes('-v')) {
-      config.verbose = true;
-      process.env.VERBOSE = 'true';
+    if (config.unknown.length > 0) {
+      console.log(chalk.red(`ⓧ Unknown option(s): ${config.unknown.join(', ')}`));
+      console.log(chalk.cyan('Run bump --help to see available options.'));
+      handleExit(1);
+      return;
     }
 
-    if (args.includes('--force-branch')) {
-      config.forceBranch = true;
-    }
+    if (config.verbose) process.env.VERBOSE = 'true';
 
     console.log(chalk.cyan('ℹ'), chalk.white('Welcome to bump!'));
 
     if (config.verbose) console.log(chalk.cyan('ℹ'), chalk.white('verbose logging enabled'));
+    if (nonInteractive) console.log(chalk.cyan('ℹ'), chalk.white('non-interactive mode: prompts are skipped'));
 
-    if (!args.includes('--help')) {
-      await checkForUpdates(); // Check for updates (configurable via ~/.bumprc)
-    }
+    await checkForUpdates(nonInteractive); // Check for updates (configurable via ~/.bumprc)
 
-    if (args.includes('--setup-workflows')) {
+    if (config.setupWorkflows) {
       const spinner = createSpinner('Setting up GitHub workflows', { color: 'gray' });
       await setupGithubWorkflows();
       spinner.success();
@@ -271,14 +261,15 @@ async function main() {
     }
     workdirSpinner.success();
 
-    if (!config.bumpType) {
-      console.log(chalk.red('\nⓧ No version type provided.'));
-      config.bumpType = await promptBumpType();
-    } else {
-      if (!validBumpTypes.includes(config.bumpType)) {
-        console.log(chalk.red('\nⓧ Invalid version type provided.'));
-        config.bumpType = await promptBumpType();
+    if (!validBumpTypes.includes(config.bumpType)) {
+      console.log(chalk.red(config.bumpType ? '\nⓧ Invalid version type provided.' : '\nⓧ No version type provided.'));
+      if (nonInteractive) {
+        console.log(chalk.red(`Expected one of: ${validBumpTypes.join(', ')}`));
+        console.log(chalk.red('Aborting...'));
+        handleExit(1);
+        return;
       }
+      config.bumpType = await promptBumpType();
     }
 
     if (interrupted) return;
@@ -307,8 +298,7 @@ async function main() {
 
       if (interrupted) return;
 
-      const preIdWanted = await promptIfPreId();
-      if (preIdWanted && !interrupted) {
+      if (!config.preId && await promptIfPreId() && !interrupted) {
         config.preId = await promptPreId(existingPreId);
       }
     }
@@ -316,7 +306,7 @@ async function main() {
     if (interrupted) return;
 
     if (!config.commitMessage) {
-      console.log(chalk.red('\nⓧ No commit message provided.'));
+      if (!nonInteractive) console.log(chalk.red('\nⓧ No commit message provided.'));
       config.commitMessage = await promptCommitMessage();
     }
 
@@ -460,12 +450,16 @@ async function main() {
     let pushSpinner;
     try {
       const currentBranch = await git.revparse(['--abbrev-ref', 'HEAD']);
-      let remote = await git.remote(['get-url', 'origin']);
+      // simple-git throws when the remote is missing, it does not return empty
+      let remote = await git.remote(['get-url', 'origin']).catch(() => '');
       if (!remote) {
         console.log(chalk.yellow('\n⚠ Unable to determine remote. Skipping push.'));
       } else {
         remote = remote.trim();
-        const push = await promptPushChanges();
+        const push = config.push ?? await promptPushChanges();
+        if (!push && nonInteractive) {
+          console.log(chalk.yellow('⚠ Not pushing. Pass --push to push the commit and tag.'));
+        }
         if (push && !interrupted) {
           pushSpinner = createSpinner('pushing changes', { color: 'gray' });
           pushSpinner.start();
@@ -534,78 +528,62 @@ async function promptBumpType(): Promise<string> {
   return interrupted ? '' : choice;
 }
 
+async function ask<T>(question: Record<string, unknown> & { name: string }, fallback: T): Promise<T> {
+  if (interrupted || nonInteractive) return fallback;
+  const answers = await inquirer.prompt([question as never]);
+  return interrupted ? fallback : (answers as Record<string, T>)[question.name];
+}
+
 async function promptIfPreId(): Promise<boolean> {
-  if (interrupted) return false;
-  const { modifier } = await inquirer.prompt([
-    {
-      type: 'confirm',
-      name: 'modifier',
-      message: 'Would you like to add a modifier to the version?',
-    },
-  ]);
-  return interrupted ? false : modifier;
+  return ask({
+    type: 'confirm',
+    name: 'modifier',
+    message: 'Would you like to add a modifier to the version?',
+  }, false);
 }
 
 async function promptPreId(defaultPreId = ''): Promise<string> {
-  if (interrupted) return '';
-  const { modifier } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'modifier',
-      message: 'What modifier would you like to add?',
-      default: defaultPreId,
-    },
-  ]);
-  return interrupted ? '' : modifier;
+  return ask({
+    type: 'input',
+    name: 'modifier',
+    message: 'What modifier would you like to add?',
+    default: defaultPreId,
+  }, defaultPreId);
 }
 
 async function promptCommitMessage(): Promise<string> {
-  if (interrupted) return '';
-  const { commitMessage } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'commitMessage',
-      message: 'What commit message would you like to use?',
-      default: 'bump version',
-    },
-  ]);
-  return interrupted ? '' : commitMessage;
+  return ask({
+    type: 'input',
+    name: 'commitMessage',
+    message: 'What commit message would you like to use?',
+    default: 'bump version',
+  }, 'bump version');
 }
 
 async function promptCommitChanges(): Promise<boolean> {
-  if (interrupted) return false;
-  const { commitChanges } = await inquirer.prompt([
-    {
-      type: 'confirm',
-      name: 'commitChanges',
-      message: 'Would you like to commit these changes with the bump?',
-    },
-  ]);
-  return interrupted ? false : commitChanges;
+  // non-interactive: include the uncommitted changes in the bump commit
+  return ask({
+    type: 'confirm',
+    name: 'commitChanges',
+    message: 'Would you like to commit these changes with the bump?',
+  }, true);
 }
 
 async function promptContinueEvenThoChanges(): Promise<boolean> {
-  if (interrupted) return false;
-  const { stillContinue } = await inquirer.prompt([
-    {
-      type: 'confirm',
-      name: 'stillContinue',
-      message: 'Would you like proceed with the bump, without including your changes?',
-    },
-  ]);
-  return interrupted ? false : stillContinue;
+  return ask({
+    type: 'confirm',
+    name: 'stillContinue',
+    message: 'Would you like proceed with the bump, without including your changes?',
+  }, false);
 }
 
 async function promptPushChanges(): Promise<boolean> {
-  if (interrupted) return false;
-  const { pushChanges } = await inquirer.prompt([
-    {
-      type: 'confirm',
-      name: 'pushChanges',
-      message: 'Would you like to push these changes to the remote?',
-    },
-  ]);
-  return interrupted ? false : pushChanges;
+  // non-interactive: pushing is opt-in via --push
+  return ask({
+    type: 'confirm',
+    name: 'pushChanges',
+    message: 'Would you like to push these changes to the remote?',
+  }, false);
 }
 
 function displayHelp() {
@@ -620,9 +598,18 @@ function displayHelp() {
   console.log('                           This is perfect if you also use itmr-dev/blaze for your ci/cd\n');
   console.log('  -v, --verbose            Enable verbose logging');
   console.log('      --force-branch       Allow bumping on branches other than main/master');
+  console.log('  -y, --yes                Never prompt; use defaults (implied when not a TTY or when CI is set)');
+  console.log('      --preid <id>         Pre-release identifier, e.g. --preid beta');
+  console.log('      --push, --no-push    Push (or do not push) commit and tags without asking');
   console.log('\nArguments:');
   console.log('  <version-type>         Type of version bump to apply (see Version types above)');
   console.log('  [commitMessage]        Optional commit message (default: "bump version")');
+  console.log('\nNon-interactive (CI / AI agents):');
+  console.log('  bump never prompts when stdin is not a TTY, when CI is set, or with --yes.');
+  console.log('  In that mode the version type is required, the commit message defaults to');
+  console.log('  "bump version", uncommitted changes are included in the bump commit, and');
+  console.log('  nothing is pushed unless --push is given. Exit code is 0 on success, 1 on failure.');
+  console.log('  Example: bump patch "release" --preid beta --push --force-branch');
   console.log('\nBranch Protection:');
   console.log('  By default, version bumping is only allowed on main or master branches.');
   console.log('  Use --force-branch to override this safety check and bump on any branch.');
