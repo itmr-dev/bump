@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.2
+
+- Pin `nanospinner` to 1.1.0. Global installs picked up 1.2.x, whose spinner clears its own line, so bump erased the line above it (the changelog link of the update notice, or "Welcome to bump!"). 1.2.x also exits the process on Ctrl+C while spinning, which could skip bump's rollback.
+
 ## 2.0.1
 
 - Each adapter now lives in its own file under `src/adapters/`, which makes adding a format a single-file PR. No behaviour change.
