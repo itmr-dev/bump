@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseVersion, nextVersion, highestTag } from '../lib/version.js';
+import { parseVersion, nextVersion, highestTag, isNewer } from '../lib/version.js';
 
 test('parseVersion', () => {
   assert.equal(parseVersion('v1.2.3'), '1.2.3');
@@ -26,4 +26,11 @@ test('highestTag ignores non-semver tags', () => {
   assert.equal(highestTag(['v1.2.0', 'release-5', 'v1.10.0', 'v1.9.9']), '1.10.0');
   assert.equal(highestTag(['release-5', '7']), null);
   assert.equal(highestTag([]), null);
+});
+
+test('isNewer handles prereleases for the update check', () => {
+  assert.equal(isNewer('1.6.0', '1.6.0-beta.0'), true);
+  assert.equal(isNewer('1.10.0', '1.9.0'), true);
+  assert.equal(isNewer('1.5.0', '1.5.0'), false);
+  assert.equal(isNewer('1.5.0', '1.6.0-beta.0'), false);
 });

@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 import packageJsonFetch from 'package-json';
 import { parseArgs } from './args.js';
 import { detect, readVersion, writeVersion, VersionFile } from './adapters.js';
-import { parseVersion, nextVersion, highestTag } from './version.js';
+import { parseVersion, nextVersion, highestTag, isNewer } from './version.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -84,15 +84,7 @@ async function checkForUpdates(nonInteractive: boolean) {
   const spinner = createSpinner('Checking for updates...').start();
   try {
     const { version: latestVersion } = await packageJsonFetch('@itmr.dev/bump');
-    // Compare versions properly (x.y.z format)
-    const isNewer = latestVersion.split('.').reduce((acc, curr, idx) => {
-      if (acc !== 0) return acc;
-      const latest = parseInt(curr, 10);
-      const current = parseInt(packageVersion.split('.')[idx], 10);
-      return latest - current;
-    }, 0) > 0;
-
-    if (isNewer) {
+    if (isNewer(latestVersion, packageVersion)) {
       if (config.updates.autoUpdate) {
         spinner.update({ text: 'Updating to latest version...' });
         try {

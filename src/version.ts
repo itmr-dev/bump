@@ -20,3 +20,8 @@ export function highestTag(tags: string[]): string | null {
   const versions = tags.map(t => t.replace(/^v/, '')).filter(t => semver.valid(t));
   return versions.length ? semver.rsort(versions)[0] : null;
 }
+
+/** Update check: is `latest` (from npm) newer than the running `current`? Prerelease-aware. */
+export function isNewer(latest: string, current: string): boolean {
+  return semver.gt(latest, current);
+}
