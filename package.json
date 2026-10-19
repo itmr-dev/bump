@@ -21,7 +21,8 @@
     "dev": "nodemon",
     "build": "tsc",
     "start": "node ./lib/index.js",
-    "test": "tsc && node --test 'test/*.test.js'"
+    "test": "tsc && node --test 'test/*.test.js'",
+    "prepublishOnly": "npm test"
   },
   "author": "Marc Rufeis",
   "license": "ISC",
