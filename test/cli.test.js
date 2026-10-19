@@ -84,7 +84,7 @@ test('silent failing pre-commit hook fails the bump, no tag', () => {
   assert.match(r.read('package.json'), /"version": "1\.0\.0"/);
 });
 
-test('upgrade notice: shown once to v1 users, never to new users', () => {
+test('upgrade notice: shown once to v1 and 2.0.x users, never to new users', () => {
   const r = repo({ 'package.json': pkg({}) });
   const run = home => spawnSync('node', [bin, '-y', '--force-branch', '--no-push', 'patch'], { cwd: r.dir, env: { ...process.env, HOME: home, CI: '1' } }).stdout.toString();
   const rc = home => JSON.parse(readFileSync(join(home, '.bumprc'), 'utf8'));
@@ -96,6 +96,12 @@ test('upgrade notice: shown once to v1 users, never to new users', () => {
   assert.equal(rc(v1Home).updates.autoUpdate, false, 'user settings are kept');
   assert.ok(rc(v1Home).lastVersion);
   assert.doesNotMatch(run(v1Home), /CHANGELOG\.md/);
+
+  // 2.1.0 is announced to users coming from 2.0.x, once
+  const v2Home = mkdtempSync(join(tmpdir(), 'bump-home-'));
+  writeFileSync(join(v2Home, '.bumprc'), JSON.stringify({ lastVersion: '2.0.1', updates: { check: false, autoUpdate: false }, branches: { allowed: ['main'] } }));
+  assert.match(run(v2Home), /CHANGELOG\.md/);
+  assert.doesNotMatch(run(v2Home), /CHANGELOG\.md/);
 
   const newHome = mkdtempSync(join(tmpdir(), 'bump-home-'));
   assert.doesNotMatch(run(newHome), /CHANGELOG\.md/);

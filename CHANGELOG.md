@@ -1,14 +1,15 @@
 # Changelog
 
-## 3.0.0
+## 2.1.0
 
-### Breaking
+### Please read
 
 - **Requires Node.js 22.13 or newer** (`^22.13.0 || >=23.5.0`). The updated dependencies dropped Node 18 and 20.
 
 ### Changed
 
 - **All dependencies updated to their latest versions:** chalk 6, execa 10, inquirer 14, simple-git 4, nanospinner 1.2 and TypeScript 7.
+- **The update notice is now a framed box**, shown once after an update to 2.1.0 or any new major.
 
 ### Fixed
 

@@ -8,6 +8,7 @@ import { simpleGit } from 'simple-git';
 import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { stripVTControlCharacters } from 'util';
 import packageJsonFetch from 'package-json';
 import semver from 'semver';
 import { parseArgs } from './args.js';
@@ -72,22 +73,47 @@ function getConfig(): BumpRcConfig {
   return defaultConfig;
 }
 
-// shown once after a major update; a .bumprc without lastVersion was written by v1
-function showMajorUpdateNotice() {
+// besides every new major, these releases announce themselves once to users updating past them
+const NOTICE_VERSIONS = ['2.1.0'];
+
+// shown once after a notable update; a .bumprc without lastVersion was written by v1
+function showUpdateNotice() {
   const configPath = join(process.env.HOME || '', '.bumprc');
   try {
     if (!existsSync(configPath)) return; // first run ever, getConfig records lastVersion
     const rc = JSON.parse(readFileSync(configPath, 'utf8'));
     if (rc.lastVersion === packageVersion) return;
-    if (semver.major(packageVersion) > semver.major(rc.lastVersion ?? '1.0.0')) {
-      console.log(chalk.magenta('★'), chalk.white(`bump was updated to v${packageVersion}, a lot has changed.`));
-      console.log(chalk.magenta(' '), chalk.white('What is new and what to watch out for:'), chalk.cyan(CHANGELOG_URL));
-    }
+    const last = rc.lastVersion ?? '1.0.0';
+    const notable = semver.major(packageVersion) > semver.major(last)
+      || NOTICE_VERSIONS.some(v => semver.gt(v, last) && semver.lte(v, packageVersion));
+    if (notable) printNoticeBox();
     rc.lastVersion = packageVersion;
     writeFileSync(configPath, JSON.stringify(rc, null, 2), 'utf8');
   } catch (error) {
     if (process.env.VERBOSE) console.error(chalk.yellow('⚠'), chalk.white('Unable to check last used version.'), error);
   }
+}
+
+function printNoticeBox() {
+  const lines = [
+    chalk.bold.white(`★ bump was updated to v${packageVersion}, a lot has changed!`),
+    '',
+    chalk.white('Read what is new and what to watch out for:'),
+    chalk.cyan.underline(CHANGELOG_URL),
+  ];
+  const width = Math.max(...lines.map(l => stripVTControlCharacters(l).length));
+  console.log();
+  // too narrow for the frame: plain lines wrap better than a broken box
+  if ((process.stdout.columns ?? 80) < width + 6) {
+    for (const line of lines) console.log(line);
+  } else {
+    console.log(chalk.magenta(`╭${'─'.repeat(width + 4)}╮`));
+    for (const line of lines) {
+      console.log(`${chalk.magenta('│')}  ${line}${' '.repeat(width - stripVTControlCharacters(line).length)}  ${chalk.magenta('│')}`);
+    }
+    console.log(chalk.magenta(`╰${'─'.repeat(width + 4)}╯`));
+  }
+  console.log();
 }
 
 async function checkForUpdates(nonInteractive: boolean) {
@@ -272,7 +298,7 @@ async function main() {
     if (config.verbose) console.log(chalk.cyan('ℹ'), chalk.white('verbose logging enabled'));
     if (nonInteractive) console.log(chalk.cyan('ℹ'), chalk.white('non-interactive mode: prompts are skipped'));
 
-    showMajorUpdateNotice();
+    showUpdateNotice();
     await checkForUpdates(nonInteractive); // Check for updates (configurable via ~/.bumprc)
 
     if (config.setupWorkflows) {
