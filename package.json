@@ -22,7 +22,8 @@
     "build": "tsc",
     "start": "node ./lib/index.js",
     "test": "tsc && node --test 'test/*.test.js'",
-    "prepublishOnly": "npm test"
+    "prepublishOnly": "npm test && npm run check-lib",
+    "check-lib": "test -z \"$(git status --porcelain -- lib)\" || { echo 'lib/ differs from a fresh build of src/: commit lib/ first'; exit 1; }"
   },
   "author": "Marc Rufeis",
   "license": "ISC",
