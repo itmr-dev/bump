@@ -25,3 +25,8 @@ export function highestTag(tags: string[]): string | null {
 export function isNewer(latest: string, current: string): boolean {
   return semver.gt(latest, current);
 }
+
+/** Does `node` satisfy an `engines.node` range? No range means any Node. */
+export function supportsNode(range: string | undefined, node: string): boolean {
+  return !range || semver.satisfies(node, range, { includePrerelease: true });
+}

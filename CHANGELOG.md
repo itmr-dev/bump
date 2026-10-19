@@ -5,6 +5,8 @@
 ### Please read
 
 - **Requires Node.js 22.13 or newer** (`^22.13.0 || >=23.5.0`). The updated dependencies dropped Node 18 and 20.
+- **On an older Node, bump says so** instead of crashing, and points to `npm install -g @itmr.dev/bump@2.0.1`, the last version that runs on Node 18 and 20.
+- **Auto-update never installs a version your Node can't run.** It shows a notice to update Node.js instead.
 
 ### Changed
 

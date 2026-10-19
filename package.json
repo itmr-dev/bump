@@ -16,7 +16,7 @@
     "version"
   ],
   "main": "./lib/index.js",
-  "bin": "./lib/index.js",
+  "bin": "./lib/cli.js",
   "scripts": {
     "dev": "nodemon",
     "build": "tsc",

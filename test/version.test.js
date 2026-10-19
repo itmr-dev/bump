@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseVersion, nextVersion, highestTag, isNewer } from '../lib/version.js';
+import { parseVersion, nextVersion, highestTag, isNewer, supportsNode } from '../lib/version.js';
 
 test('parseVersion', () => {
   assert.equal(parseVersion('v1.2.3'), '1.2.3');
@@ -33,4 +33,14 @@ test('isNewer handles prereleases for the update check', () => {
   assert.equal(isNewer('1.10.0', '1.9.0'), true);
   assert.equal(isNewer('1.5.0', '1.5.0'), false);
   assert.equal(isNewer('1.5.0', '1.6.0-beta.0'), false);
+});
+
+test('supportsNode checks a Node version against an engines range', () => {
+  const range = '^22.13.0 || >=23.5.0';
+  assert.equal(supportsNode(range, '20.11.0'), false);
+  assert.equal(supportsNode(range, '22.12.0'), false);
+  assert.equal(supportsNode(range, '22.13.0'), true);
+  assert.equal(supportsNode(range, '23.4.0'), false);
+  assert.equal(supportsNode(range, '26.11.1'), true);
+  assert.equal(supportsNode(undefined, '18.0.0'), true, 'no engines field means any Node');
 });

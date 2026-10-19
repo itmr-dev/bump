@@ -6,7 +6,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 
-const bin = fileURLToPath(new URL('../lib/index.js', import.meta.url));
+const bin = fileURLToPath(new URL('../lib/cli.js', import.meta.url));
 
 function repo(files) {
   const dir = mkdtempSync(join(tmpdir(), 'bump-cli-'));
@@ -67,7 +67,13 @@ test('Ctrl+C during the bump rolls back', async () => {
   let out = '';
   child.stdout.on('data', d => { out += d; });
   // wait until bump is inside the version script, then interrupt it
-  await new Promise(resolve => { const t = setInterval(() => { if (r.read('package.json').includes('1.0.1')) { clearInterval(t); resolve(); } }, 50); });
+  await new Promise((resolve, reject) => {
+    const deadline = Date.now() + 10000;
+    const t = setInterval(() => {
+      if (r.read('package.json').includes('1.0.1')) { clearInterval(t); resolve(); }
+      else if (Date.now() > deadline) { clearInterval(t); child.kill(); reject(new Error(`bump never reached the version script: ${out}`)); }
+    }, 50);
+  });
   child.kill('SIGINT');
   await new Promise(resolve => child.on('exit', resolve));
   assert.match(out, /Changes reverted/);
@@ -106,4 +112,14 @@ test('upgrade notice: shown once to v1 and 2.0.x users, never to new users', () 
   const newHome = mkdtempSync(join(tmpdir(), 'bump-home-'));
   assert.doesNotMatch(run(newHome), /CHANGELOG\.md/);
   assert.doesNotMatch(run(newHome), /CHANGELOG\.md/);
+});
+
+test('unsupported Node: clear message before loading anything', () => {
+  // pretend to be Node 20 before bump starts
+  const fake = 'data:text/javascript,Object.defineProperty(process, "versions", { value: { ...process.versions, node: "20.11.0" } })';
+  const r = spawnSync('node', ['--import', fake, bin, '--help'], { env: { ...process.env, CI: '1' } });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr.toString(), /Node\.js .*20\.11\.0/);
+  assert.match(r.stderr.toString(), /@itmr\.dev\/bump@2\.0\.1/);
+  assert.doesNotMatch(r.stdout.toString(), /Usage/);
 });

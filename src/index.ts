@@ -13,7 +13,7 @@ import packageJsonFetch from 'package-json';
 import semver from 'semver';
 import { parseArgs } from './args.js';
 import { detect, readVersion, writeVersion, VersionFile } from './adapters/index.js';
-import { parseVersion, nextVersion, highestTag, isNewer } from './version.js';
+import { parseVersion, nextVersion, highestTag, isNewer, supportsNode } from './version.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -133,9 +133,13 @@ async function checkForUpdates(nonInteractive: boolean) {
   // nanospinner >= 1.2: stop() without options removes the spinner line, nothing to clear by hand
   const spinner = startSpinner(createSpinner('Checking for updates...'));
   try {
-    const { version: latestVersion } = await packageJsonFetch('@itmr.dev/bump');
+    const { version: latestVersion, engines } = await packageJsonFetch('@itmr.dev/bump');
     if (isNewer(latestVersion, packageVersion)) {
-      if (config.updates.autoUpdate) {
+      if (!supportsNode(engines?.node, process.versions.node)) {
+        // never auto-install a version that cannot run here, npm itself only warns
+        spinner.stop();
+        console.log(chalk.yellow('⚠'), chalk.white(`bump ${latestVersion} is available but needs Node.js ${engines!.node}, you have ${process.versions.node}. Update Node.js to get it.`));
+      } else if (config.updates.autoUpdate) {
         spinner.update({ text: 'Updating to latest version...' });
         try {
           await execa('npm', ['install', '-g', '@itmr.dev/bump']);
